@@ -1,0 +1,17 @@
+{
+  "name": "pbft-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "pBFT happy-path NDJSON WebSocket simulator",
+  "main": "sim_server.js",
+  "scripts": {
+    "start": "node sim_server.js"
+  },
+  "dependencies": {
+    "ws": "^8.17.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+
