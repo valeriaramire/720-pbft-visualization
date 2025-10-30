@@ -801,12 +801,6 @@ export default function App() {
           <button className="btn" onClick={() => { setDemoRunning(true); }}>
             Continue
           </button>
-          <button className="btn" onClick={() => { if (demoRunning) setDemoRunning(false); if (!manualInitializedRef.current) initDemoManual(); manualTick(); }}>
-            Next Step
-          </button>
-          <button className="btn" onClick={() => { setDemoRunning(true); }}>
-            Continue
-          </button>
           <span style={{marginLeft: 8, opacity: 0.8}}>n</span>
           <input className="smallinput" type="number" min={1} max={64} value={nInput}
                  onChange={(e)=> setNInput(parseInt(e.target.value || '1', 10) || 1)} />
