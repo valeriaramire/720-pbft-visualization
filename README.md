@@ -1,6 +1,6 @@
 # pBFT Happy-Path Demo
 
-This demo includes a Node.js WebSocket simulator that emits NDJSON events for a repeated pBFT happy-path (PrePrepare → Prepare → Commit) and a React + TypeScript frontend that visualizes the nodes, message pulses, and a quorum meter.
+PBFT Visualization REACT Web App
 
 ## Run
 
