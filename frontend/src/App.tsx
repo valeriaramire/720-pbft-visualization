@@ -271,7 +271,10 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
       }
     } else {
       // lanes layout: first row client, then replicas 0..n-1 equally spaced
-      const top = 70
+      // dedicate a fixed header band for phase titles
+      const headerBand = 56
+      const titleY = 16
+      const top = headerBand + 20
       const bottom = H - 40
       const lanes = n + 1
       for (let i = 0; i < n; i++) {
@@ -284,8 +287,8 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
       const ppX = W * 0.36
       const prepX = W * 0.56
       const comX = W * 0.72
-      const comFanX = comX + (W * 0.92 - comX) * 0.5 // intermediate grid between Commit and Reply
-      const repX = W * 0.92
+      const comFanX = W * 0.84
+      const repX = W * 0.94
       const stageXs = [reqX, ppX, prepX, comX, comFanX, repX]
       ctx.strokeStyle = 'rgba(230,235,255,0.2)'
       ctx.setLineDash([6, 6])
@@ -294,15 +297,19 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
       }
       ctx.setLineDash([])
       ctx.fillStyle = colors.text
-      ctx.font = '12px system-ui, sans-serif'
+      ctx.font = '13px system-ui, sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'top'
-      const titleY = 24
-      ctx.fillText('Request', reqX, titleY)
-      ctx.fillText('PrePrepare', ppX, titleY)
-      ctx.fillText('Prepare', prepX, titleY)
-      ctx.fillText('Commit', comX, titleY)
-      ctx.fillText('Reply', repX, titleY)
+      const mid01 = (reqX + ppX) / 2
+      const mid12 = (ppX + prepX) / 2
+      const mid23 = (prepX + comX) / 2
+      const mid34 = (comX + comFanX) / 2
+      const mid45 = (comFanX + repX) / 2
+      ctx.fillText('Request', mid01, titleY)
+      ctx.fillText('PrePrepare', mid12, titleY)
+      ctx.fillText('Prepare', mid23, titleY)
+      ctx.fillText('Commit', mid34, titleY)
+      ctx.fillText('Reply', mid45, titleY)
       ctx.textAlign = 'left'
       ctx.textBaseline = 'alphabetic'
 
@@ -369,20 +376,34 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
           continue
         }
       }
-      // draw nodes as dots on columns
+      // draw nodes as dots on columns (fixed per-phase colors; include comFanX)
       for (let i = 0; i < n; i++) {
         const y = laneY(i)
-        const phase = state.nodePhase.get(i) || 'idle'
-        const fill = (phase === 'idle') ? colors.idle : (phase === 'preprepare') ? colors.preprepare : (phase === 'prepare') ? colors.prepare : colors.commit
-        ctx.fillStyle = fill
-        for (const x of [ppX, prepX, comX]) {
-          ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill()
-          ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1; ctx.stroke()
-        }
+        // PrePrepare column
+        ctx.fillStyle = colors.preprepare
+        ctx.beginPath(); ctx.arc(ppX, y, 7, 0, Math.PI * 2); ctx.fill()
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke()
+
+        // Prepare column
+        ctx.fillStyle = colors.prepare
+        ctx.beginPath(); ctx.arc(prepX, y, 7, 0, Math.PI * 2); ctx.fill()
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke()
+
+        // Commit column
+        ctx.fillStyle = colors.commit
+        ctx.beginPath(); ctx.arc(comX, y, 7.5, 0, Math.PI * 2); ctx.fill()
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2; ctx.stroke()
+
+        // Commit fan-out column (between Commit and Reply)
+        ctx.fillStyle = colors.commit
+        ctx.beginPath(); ctx.arc(comFanX, y, 7, 0, Math.PI * 2); ctx.fill()
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 1.5; ctx.stroke()
+
+        // Primary highlight at PrePrepare column only
         if (i === primaryId) {
           ctx.strokeStyle = colors.primaryRing
           ctx.lineWidth = 2
-          ctx.beginPath(); ctx.arc(ppX, y, 8, 0, Math.PI * 2); ctx.stroke()
+          ctx.beginPath(); ctx.arc(ppX, y, 9, 0, Math.PI * 2); ctx.stroke()
         }
       }
       return
@@ -409,7 +430,7 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
       const age = now - m.t
       const alpha = 1 - Math.min(1, age / PULSE_MS)
       if (m.type === 'Client' && m.to && m.to.length) {
-        const q = positions[0]
+        const q = positions[primaryId]
         ctx.strokeStyle = `rgba(134, 224, 255, ${alpha.toFixed(3)})`
         ctx.lineWidth = 2
         ctx.beginPath()
