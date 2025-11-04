@@ -4,9 +4,11 @@
 
 ### Test 1
 Populating the PBFT tool with the JSON inputs.
+
 UI:
 ![alt text](<Screenshot 2025-11-03 162929.png>)
 ![alt text](<Screenshot 2025-11-03 170851.png>)
+
 Result:
 
 ### Start and Stop button
@@ -26,7 +28,7 @@ Result:
 cd my-app
 npm start
 
-# -----------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------
 
 # Getting Started with Create React App
 
