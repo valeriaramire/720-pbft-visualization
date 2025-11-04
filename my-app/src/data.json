@@ -1,0 +1,64 @@
+{
+    "replicas": [
+        {
+            "replicaId": 1,
+            "action": "pre-prepare",
+            "timestamp": "00:00:00",
+            "destination": 3
+        },
+        {
+            "replicaId": 1,
+            "action": "prepare",
+            "timestamp": "00:00:00",
+            "destination": 3
+        },
+        {
+            "replicaId": 1,
+            "action": "propose",
+            "timestamp": "00:00:00",
+            "destination": 3
+        },
+        {
+            "replicaId": 1,
+            "action": "commit",
+            "timestamp": "00:00:00",
+            "destination": 3
+        },
+        {
+            "replicaId": 2,
+            "action": "pre-prepare",
+            "timestamp": "00:00:00",
+            "destination": 3
+        },
+        {
+            "replicaId": 2,
+            "action": "prepare",
+            "timestamp": "00:00:00",
+            "destination": 3
+        },
+        {
+            "replicaId": 1,
+            "action": "reply",
+            "timestamp": "00:00:00",
+            "destination": 3
+        },
+        {
+            "replicaId": 2,
+            "action": "propose",
+            "timestamp": "00:00:00",
+            "destination": 3
+        },
+        {
+            "replicaId": 2,
+            "action": "commit",
+            "timestamp": "00:00:00",
+            "destination": 3
+        },
+        {
+            "replicaId": 2,
+            "action": "reply",
+            "timestamp": "00:00:00",
+            "destination": 3
+        }
+    ]
+}
