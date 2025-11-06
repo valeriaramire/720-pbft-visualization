@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 type Phase = 'idle' | 'preprepare' | 'prepare' | 'commit'
 type EventType = 'ClientRequest' | 'PrePrepare' | 'Prepare' | 'Commit' | 'Reply' | 'SessionStart' | 'PrimaryElected'
 
@@ -47,6 +47,29 @@ type Action =
   | { kind: 'client'; to: number; t: number; eid: number }
   | { kind: 'stage'; label: string; seq: number | null }
   | { kind: 'reply'; from: number; t: number; eid: number }
+
+const LANE_HEADER_BAND = 56
+const LANE_TITLE_Y = 16
+const LANE_TOP_OFFSET = LANE_HEADER_BAND + 20
+const LANE_BOTTOM_MARGIN = 140
+const LANE_MIN_SPACING = 32
+const LANE_PREFERRED_SPACING = 54
+const LANE_SCROLL_FALLBACK_THRESHOLD = 18
+const MIN_NODE_RADIUS = 6
+const MAX_NODE_RADIUS = 22
+const RING_NODE_MIN_GAP = 6
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+function computeRingNodeRadius(width: number, height: number, orbitRadius: number, n: number) {
+  const viewportBased = Math.min(width, height) * 0.03
+  if (n <= 1) return clamp(viewportBased, MIN_NODE_RADIUS, MAX_NODE_RADIUS)
+  const circumference = 2 * Math.PI * Math.max(orbitRadius, 1)
+  const spacing = circumference / n
+  const spacingLimited = (spacing - RING_NODE_MIN_GAP) / 2
+  const target = Math.min(viewportBased, spacingLimited)
+  return clamp(target, MIN_NODE_RADIUS, MAX_NODE_RADIUS)
+}
 
 const initialState: State = {
   n: 4,
@@ -260,10 +283,10 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
     const cx = W / 2
     const cy = H / 2
     const radius = Math.max(60, Math.min(W, H) * 0.35)
-    const nodeR = Math.max(10, Math.min(W, H) * 0.03)
 
     const positions: { x: number; y: number }[] = []
     const n = state.n
+    const nodeR = computeRingNodeRadius(W, H, radius, n)
     if (mode === 'ring') {
       for (let i = 0; i < n; i++) {
         const ang = (i / n) * Math.PI * 2 - Math.PI / 2
@@ -272,10 +295,8 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
     } else {
       // lanes layout: first row client, then replicas 0..n-1 equally spaced
       // dedicate a fixed header band for phase titles
-      const headerBand = 56
-      const titleY = 16
-      const top = headerBand + 20
-      const bottom = H - 40
+      const top = LANE_TOP_OFFSET
+      const bottom = H - LANE_BOTTOM_MARGIN
       const lanes = n + 1
       for (let i = 0; i < n; i++) {
         const row = i + 1 // replicas start after client
@@ -305,11 +326,11 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
       const mid23 = (prepX + comX) / 2
       const mid34 = (comX + comFanX) / 2
       const mid45 = (comFanX + repX) / 2
-      ctx.fillText('Request', mid01, titleY)
-      ctx.fillText('PrePrepare', mid12, titleY)
-      ctx.fillText('Prepare', mid23, titleY)
-      ctx.fillText('Commit', mid34, titleY)
-      ctx.fillText('Reply', mid45, titleY)
+      ctx.fillText('Request', mid01, LANE_TITLE_Y)
+      ctx.fillText('PrePrepare', mid12, LANE_TITLE_Y)
+      ctx.fillText('Prepare', mid23, LANE_TITLE_Y)
+      ctx.fillText('Commit', mid34, LANE_TITLE_Y)
+      ctx.fillText('Reply', mid45, LANE_TITLE_Y)
       ctx.textAlign = 'left'
       ctx.textBaseline = 'alphabetic'
 
@@ -544,11 +565,26 @@ export default function App() {
   const [layout, setLayout] = useState<'ring'|'lanes'>('ring')
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasWrapRef = useRef<HTMLDivElement>(null)
   const faultySetRef = useRef<Set<number>>(new Set())
+  const [canvasViewportHeight, setCanvasViewportHeight] = useState(0)
 
   useEffect(() => {
     lastEidRef.current = state.lastEid
   }, [state.lastEid])
+
+  useLayoutEffect(() => {
+    const host = canvasWrapRef.current
+    if (!host || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(entries => {
+      const entry = entries[0]
+      if (!entry) return
+      const { height } = entry.contentRect
+      setCanvasViewportHeight(Math.round(height))
+    })
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [])
 
   const onEvent = useCallback((env: Envelope) => {
     const t = performance.now()
@@ -594,6 +630,21 @@ export default function App() {
   }, [state.n, state.f])
 
   useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout)
+
+  const laneScrollMetrics = useMemo(() => {
+    if (layout !== 'lanes') return { needScroll: false, virtualHeight: undefined as number | undefined }
+    const lanes = state.n + 1
+    const steps = Math.max(1, lanes - 1)
+    const viewportAllowance = Math.max(0, canvasViewportHeight - (LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN))
+    const spacing = viewportAllowance && steps ? viewportAllowance / steps : viewportAllowance
+    const hasViewport = canvasViewportHeight > 0
+    const needsScrollFromHeight = hasViewport ? spacing < LANE_MIN_SPACING : false
+    const fallbackNeed = !hasViewport && state.n >= LANE_SCROLL_FALLBACK_THRESHOLD
+    const needScroll = needsScrollFromHeight || fallbackNeed
+    if (!needScroll) return { needScroll: false, virtualHeight: undefined }
+    const virtualHeight = LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN + steps * LANE_PREFERRED_SPACING
+    return { needScroll: true, virtualHeight }
+  }, [layout, state.n, canvasViewportHeight])
 
   const quorumThreshold = useMemo(() => 2 * state.f + 1, [state.f])
   const quorumProgress = useMemo(() => {
@@ -835,8 +886,14 @@ export default function App() {
           <div className="kv"><span>commits</span><strong>{state.commits.size}</strong></div>
           <div className="kv"><span>quorum</span><strong>{quorumThreshold}</strong></div>
         </div>
-        <div className="canvaswrap">
-          <canvas ref={canvasRef} className="canvas" />
+        <div className="canvaswrap" ref={canvasWrapRef}>
+          <div className={`canvas-scroll${laneScrollMetrics.needScroll ? ' is-scrollable' : ''}`}>
+            <canvas
+              ref={canvasRef}
+              className="canvas"
+              style={laneScrollMetrics.virtualHeight ? { height: laneScrollMetrics.virtualHeight } : undefined}
+            />
+          </div>
           <div className="stagehud">
             <div className="stagetext">Stage: {state.stageLabel} · seq: {state.stageSeq ?? '-'}</div>
           </div>
