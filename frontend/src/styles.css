@@ -14,11 +14,21 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px; background: var(--panel); border-bottom: 1px solid #253062;
+  flex-wrap: wrap; gap: 10px 12px; align-items: flex-start;
 }
-.topbar .left { display: flex; gap: 8px; align-items: center; }
-.topbar .right { display: flex; gap: 14px; align-items: center; font-size: 13px; opacity: 0.9; }
+.topbar .left {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  flex: 1 1 640px;
+}
+.topbar .right {
+  display: flex; gap: 14px; align-items: center; font-size: 13px; opacity: 0.9;
+  margin-left: auto; flex: 0 0 auto;
+}
 
-.urlinput { width: 420px; background: #0c1120; color: var(--text); border: 1px solid #2a376c; padding: 8px 10px; border-radius: 6px; }
+.urlinput {
+  flex: 1 1 320px; width: 100%; max-width: 420px;
+  background: #0c1120; color: var(--text); border: 1px solid #2a376c; padding: 8px 10px; border-radius: 6px;
+}
 .btn { background: var(--accent); color: #0a0f1f; border: none; padding: 8px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; }
 .btn:hover { filter: brightness(1.05); }
 .btn + .btn { margin-left: 6px; }
@@ -27,6 +37,30 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .status.connecting { background: #8a6a19; }
 .eid { opacity: 0.8; }
 .smallinput { width: 72px; background: #0c1120; color: var(--text); border: 1px solid #2a376c; padding: 6px 8px; border-radius: 6px; }
+
+@media (max-width: 1080px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .topbar .left {
+    width: 100%;
+    flex: 1 1 auto;
+    align-items: flex-start;
+  }
+  .topbar .right {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+  }
+  .topbar .left > * {
+    flex: 0 0 auto;
+  }
+  .urlinput {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
 
 .content { flex: 1; display: grid; grid-template-columns: 240px 1fr; gap: 0; min-height: 0; }
 

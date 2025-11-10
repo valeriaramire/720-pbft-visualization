@@ -722,8 +722,6 @@ export default function App() {
         if (r < n) {
           if (!(faultySetRef.current as any).has(r)) {
             dispatch({ kind: 'commit', from: r, t, eid: bump() })
-          } else {
-            dispatch({ kind: 'prepare', from: r, t, eid: bump() })
           }
           dispatch({ kind: 'stage', label: 'Commit', seq })
           demoRef.current.r = r + 1
