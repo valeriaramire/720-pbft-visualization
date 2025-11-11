@@ -1,0 +1,47 @@
+import React from 'react'
+
+export type LaneScrollMetrics = {
+  needScroll: boolean
+  virtualHeight?: number
+}
+
+type CanvasPanelProps = {
+  canvasRef: React.RefObject<HTMLCanvasElement>
+  canvasWrapRef: React.RefObject<HTMLDivElement>
+  laneScroll: LaneScrollMetrics
+  stageLabel: string
+  stageSeq: number | null
+  quorumProgress: number
+  commitCount: number
+  quorumThreshold: number
+}
+
+export default function CanvasPanel({
+  canvasRef,
+  canvasWrapRef,
+  laneScroll,
+  stageLabel,
+  stageSeq,
+  quorumProgress,
+  commitCount,
+  quorumThreshold,
+}: CanvasPanelProps) {
+  const scrollClass = `canvas-scroll${laneScroll.needScroll ? ' is-scrollable' : ''}`
+  const canvasStyle = laneScroll.virtualHeight ? { height: laneScroll.virtualHeight } : undefined
+  return (
+    <div className="canvaswrap" ref={canvasWrapRef}>
+      <div className={scrollClass}>
+        <canvas ref={canvasRef} className="canvas" style={canvasStyle} />
+      </div>
+      <div className="stagehud">
+        <div className="stagetext">Stage: {stageLabel} · seq: {stageSeq ?? '-'}</div>
+      </div>
+      <div className="quorum">
+        <div className="meter">
+          <div className="fill" style={{ width: `${quorumProgress * 100}%` }} />
+        </div>
+        <div className="label">Commit quorum: {commitCount} / {quorumThreshold}</div>
+      </div>
+    </div>
+  )
+}
