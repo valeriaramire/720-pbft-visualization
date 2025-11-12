@@ -28,6 +28,8 @@ export default function App() {
   const canvasWrapRef = useRef<HTMLDivElement>(null)
   const faultySetRef = useRef<Set<number>>(new Set())
   const [canvasViewportHeight, setCanvasViewportHeight] = useState(0)
+  const [statusMessage, setStatusMessage] = useState<string>('Waiting for events...')
+
 
   useEffect(() => {
     lastEidRef.current = state.lastEid
@@ -49,30 +51,37 @@ export default function App() {
   const onEvent = useCallback((env: Envelope) => {
     const t = performance.now()
     if (env.type === 'SessionStart') {
+      setStatusMessage('Starting New Session')
       dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
       return
     }
     if (env.type === 'PrimaryElected') {
+      setStatusMessage('A Primary has been elected')
       dispatch({ kind: 'primaryElected' })
       return
     }
     if (env.type === 'ClientRequest') {
+      setStatusMessage('The client has sent a request to the primary node to execute an operation.')
       dispatch({ kind: 'client', to: 0, t, eid: env.eid })
       return
     }
     if (env.type === 'PrePrepare') {
+      setStatusMessage('The primary broadcasts a *Pre-Prepare* message to all replicas, proposing the client’s request.')
       dispatch({ kind: 'prePrepare', seq: env.seq, from: env.from, to: env.to, t, eid: env.eid })
       return
     }
     if (env.type === 'Prepare') {
+      setStatusMessage('Replicas have received the proposal and are now broadcasting *Prepare* messages to confirm it matches their log.')
       dispatch({ kind: 'prepare', from: env.from, t, eid: env.eid })
       return
     }
     if (env.type === 'Commit') {
+      setStatusMessage('Nodes have collected enough *Prepare* messages and are broadcasting *Commit* messages to finalize the decision.')
       dispatch({ kind: 'commit', from: env.from, t, eid: env.eid })
       return
     }
     if (env.type === 'Reply') {
+      setStatusMessage('Enough nodes have committed the request — a *Reply* is sent back to the client confirming execution.')
       dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
       return
     }
@@ -348,6 +357,7 @@ export default function App() {
           seq={state.seq}
           commits={state.commits.size}
           quorumThreshold={quorumThreshold}
+          statusMessage={statusMessage}
         />
         <CanvasPanel
           canvasRef={canvasRef}
