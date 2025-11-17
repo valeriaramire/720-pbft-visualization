@@ -109,3 +109,4 @@ codes/wandlr
 
 # allow override by adding an explicit tracked file
 !/.gitignore
+.gitconfig
