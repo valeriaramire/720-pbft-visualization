@@ -49,7 +49,7 @@ app.add_middleware(
 )
 
 
-def make_consumer(offset: str = "latest") -> KafkaConsumer:
+def make_consumer(offset: str = "latest", group_id: str | None = None) -> KafkaConsumer:
     """
     Create a Kafka consumer subscribed to the PBFT log topic.
     offset: "latest" -> only new messages
@@ -58,10 +58,12 @@ def make_consumer(offset: str = "latest") -> KafkaConsumer:
     if offset not in ("latest", "earliest"):
         offset = "latest"
 
+    if group_id:
+        group_id = group_id.strip() or None
     consumer = KafkaConsumer(
         KAFKA_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-        group_id=KAFKA_GROUP_ID,
+        group_id=group_id or KAFKA_GROUP_ID,
         auto_offset_reset=offset,
         enable_auto_commit=True,
         value_deserializer=lambda v: v.decode("utf-8", errors="ignore"),
@@ -115,23 +117,16 @@ def filter_pbft_event(raw_value: str) -> Dict[str, Any] | None:
     return cleaned
 
 
-def extract_seq(data: Dict[str, Any]) -> Optional[int]:
-    seq = data.get("seq")
-    if isinstance(seq, int):
-        return seq
+def extract_order(data: Dict[str, Any]) -> Optional[int]:
     order = data.get("order")
     if isinstance(order, int):
         return order
-    instance = data.get("instance")
-    if isinstance(instance, int):
-        return instance
     message = data.get("message") or {}
     proposal = message.get("proposal") or {}
     proposal_msg = proposal.get("message") or {}
-    for key in ("order", "seq"):
-        val = proposal_msg.get(key)
-        if isinstance(val, int):
-            return val
+    val = proposal_msg.get("order")
+    if isinstance(val, int):
+        return val
     return None
 
 
@@ -161,6 +156,12 @@ def build_envelope(cleaned: Dict[str, Any]) -> Dict[str, Any] | None:
     if event_type == "PrePrepare":
         to_field = [i for i in range(REPLICA_COUNT) if i != from_id and i >= 0]
 
+    seq_val = extract_order(cleaned.get("raw", {}))
+    if not isinstance(seq_val, int):
+        seq_val = cleaned.get("instance")
+    if not isinstance(seq_val, int):
+        seq_val = 0
+
     envelope = {
         "schema_ver": SCHEMA_VERSION,
         "type": event_type,
@@ -168,7 +169,7 @@ def build_envelope(cleaned: Dict[str, Any]) -> Dict[str, Any] | None:
         "sid": SESSION_ID,
         "eid": 0,  # filled later
         "view": extract_view(cleaned.get("raw", {})) or 0,
-        "seq": extract_seq(cleaned.get("raw", {})) or cleaned.get("instance") or 0,
+        "seq": seq_val,
         "from": from_id,
         "to": to_field,
         "data": cleaned.get("raw"),
@@ -213,13 +214,13 @@ def health():
 
 
 @app.get("/stream")
-def stream(offset: str = "latest", from_eid: int | None = None):
+def stream(offset: str = "latest", from_eid: int | None = None, group: str | None = None):
     """
     SSE endpoint.
     - React will open an EventSource to this URL.
     - We create a Kafka consumer and stream filtered PBFT events as they arrive.
     """
-    consumer = make_consumer(offset=offset)
+    consumer = make_consumer(offset=offset, group_id=group)
 
     control_events = [
         build_control_event("SessionStart", {"n": REPLICA_COUNT, "f": FAULT_TOLERANCE}),
