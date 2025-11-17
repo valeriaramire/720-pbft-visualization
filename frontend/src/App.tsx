@@ -58,6 +58,7 @@ const LANE_SCROLL_FALLBACK_THRESHOLD = 18
 const MIN_NODE_RADIUS = 6
 const MAX_NODE_RADIUS = 22
 const RING_NODE_MIN_GAP = 6
+const PLAYBACK_PRESETS_EPS = [8, 4, 2, 1, 0.5]
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
@@ -263,7 +264,7 @@ function useSSEStream(urlStr: string, onEvent: (env: Envelope) => void, lastEidR
 }
 
 type LayoutMode = 'ring' | 'lanes'
-function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.RefObject<HTMLCanvasElement>, faultySet?: Set<number>, mode: LayoutMode = 'ring') {
+function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.RefObject<HTMLCanvasElement>, mode: LayoutMode = 'ring') {
   const colors = {
     bg: '#0f1424',
     panel: '#1b2140',
@@ -458,7 +459,7 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
     ctx.font = '12px system-ui, sans-serif'
     ctx.textAlign = 'center'
     ctx.fillText('Client', clientPos.x, clientPos.y - 10)
-    // Lines for Client→Primary and PrePrepare/Prepare/Commit/Reply
+    // Lines for Client->Primary and PrePrepare/Prepare/Commit/Reply
     for (const m of messages) {
       const age = now - m.t
       const alpha = 1 - Math.min(1, age / PULSE_MS)
@@ -529,14 +530,6 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
         ctx.arc(pos.x, pos.y, nodeR + 4, 0, Math.PI * 2)
         ctx.stroke()
       }
-      // Faulty outline in red
-      if (faultySet && faultySet.has(i)) {
-        ctx.strokeStyle = '#ff5c5c'
-        ctx.lineWidth = 2
-        ctx.beginPath()
-        ctx.arc(pos.x, pos.y, nodeR + 7, 0, Math.PI * 2)
-        ctx.stroke()
-      }
     }
 
     // Node pulse rings for Prepare/Commit
@@ -553,7 +546,7 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
       ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2)
       ctx.stroke()
     }
-  }, [canvasRef, state.messages, state.n, state.nodePhase, faultySet, mode])
+  }, [canvasRef, state.messages, state.n, state.nodePhase, mode])
 
   useEffect(() => {
     let raf = 0
@@ -569,17 +562,15 @@ function useCanvasRenderer(state: State, primaryId: number, canvasRef: React.Ref
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [url, setUrl] = useState('http://localhost:8002/stream')
-  const [demoRunning, setDemoRunning] = useState(false)
-  const [demoEps, setDemoEps] = useState(3)
-  const [nInput, setNInput] = useState<number>(initialState.n)
-  const [fInput, setFInput] = useState<number>(initialState.f)
-  const [faultyInput, setFaultyInput] = useState<string>("")
   const [layout, setLayout] = useState<'ring'|'lanes'>('ring')
-  const [lastEventSummary, setLastEventSummary] = useState<string>('-')
+  const [playbackDelay, setPlaybackDelay] = useState(250)
+  const [queuedEvents, setQueuedEvents] = useState(0)
+  const [playbackPaused, setPlaybackPaused] = useState(false)
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasWrapRef = useRef<HTMLDivElement>(null)
-  const faultySetRef = useRef<Set<number>>(new Set())
+  const pendingEventsRef = useRef<Envelope[]>([])
+  const fallbackNFRef = useRef({ n: initialState.n, f: initialState.f })
   const [canvasViewportHeight, setCanvasViewportHeight] = useState(0)
 
   useEffect(() => {
@@ -599,11 +590,16 @@ export default function App() {
     return () => observer.disconnect()
   }, [])
 
-  const onEvent = useCallback((env: Envelope) => {
+  useEffect(() => {
+    fallbackNFRef.current = { n: state.n, f: state.f }
+  }, [state.n, state.f])
+
+  const processEnvelope = useCallback((env: Envelope) => {
     const t = performance.now()
-    setLastEventSummary(`${env.type} · seq ${env.seq ?? '-'} · eid ${env.eid ?? '-'}`)
     if (env.type === 'SessionStart') {
-      dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
+      const nextN = typeof env.data?.n === 'number' ? env.data.n : fallbackNFRef.current.n
+      const nextF = typeof env.data?.f === 'number' ? env.data.f : fallbackNFRef.current.f
+      dispatch({ kind: 'sessionStart', n: nextN, f: nextF })
       return
     }
     if (env.type === 'PrimaryElected') {
@@ -630,20 +626,58 @@ export default function App() {
       dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
       return
     }
-  }, [state.n, state.f])
+  }, [dispatch])
 
-  const { status, connect, disconnect } = useSSEStream(url, onEvent, lastEidRef)
+  const enqueueEvent = useCallback((env: Envelope) => {
+    // Temporary diagnostic to inspect incoming SSE payloads in DevTools.
+    console.log('[SSE] envelope', env)
+    pendingEventsRef.current.push(env)
+    setQueuedEvents(pendingEventsRef.current.length)
+  }, [])
+
+  const { status, connect, disconnect } = useSSEStream(url, enqueueEvent, lastEidRef)
 
   useEffect(() => {
     dispatch({ kind: 'connected', value: status === 'connected' })
   }, [status])
 
-  useEffect(() => {
-    setNInput(state.n)
-    setFInput(state.f)
-  }, [state.n, state.f])
+  const flushQueue = useCallback(() => {
+    pendingEventsRef.current = []
+    setQueuedEvents(0)
+  }, [])
 
-  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout)
+  useEffect(() => {
+    if (status === 'disconnected') {
+      flushQueue()
+      setPlaybackPaused(false)
+    }
+  }, [flushQueue, status])
+
+  useEffect(() => {
+    let cancelled = false
+    let handle: number | null = null
+    const minDelay = Math.max(16, playbackDelay)
+
+    const pump = () => {
+      if (cancelled) return
+      if (!playbackPaused && pendingEventsRef.current.length > 0) {
+        const next = pendingEventsRef.current.shift()!
+        setQueuedEvents(pendingEventsRef.current.length)
+        processEnvelope(next)
+      }
+      handle = window.setTimeout(pump, minDelay)
+    }
+
+    handle = window.setTimeout(pump, minDelay)
+    return () => {
+      cancelled = true
+      if (handle !== null) {
+        clearTimeout(handle)
+      }
+    }
+  }, [playbackDelay, playbackPaused, processEnvelope])
+
+  useCanvasRenderer(state, 0, canvasRef, layout)
 
   const laneScrollMetrics = useMemo(() => {
     if (layout !== 'lanes') return { needScroll: false, virtualHeight: undefined as number | undefined }
@@ -666,176 +700,34 @@ export default function App() {
     return Math.max(0, Math.min(1, v))
   }, [state.commits.size, quorumThreshold])
 
-  // Demo mode local generator
-  const demoTimerRef = useRef<number | null>(null)
-  const localEidRef = useRef<number>(0)
-  const demoRef = useRef({ seq: 1, stage: 'client' as 'client' | 'pp' | 'prep' | 'commit', r: 0, pauseUntil: 0 })
-  const manualInitializedRef = useRef<boolean>(false)
+  const buildReplayUrl = useCallback(() => {
+    const uniqueGroup = `replay-${Date.now()}`
+    try {
+      const parsed = new URL(url)
+      parsed.searchParams.set('offset', 'earliest')
+      parsed.searchParams.set('group', uniqueGroup)
+      parsed.searchParams.delete('from_eid')
+      return parsed.toString()
+    } catch {
+      const sep = url.includes('?') ? '&' : '?'
+      return `${url}${sep}offset=earliest&group=${uniqueGroup}`
+    }
+  }, [url])
 
-  useEffect(() => {
-    if (!demoRunning) {
-      if (demoTimerRef.current) {
-        clearInterval(demoTimerRef.current)
-        demoTimerRef.current = null
-      }
-      return
-    }
-    // Initialize session for demo
-    dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
-    localEidRef.current = 0
-    demoRef.current = { seq: 1, stage: 'client', r: 0, pauseUntil: 0 }
-    // parse faulty input
-    // not stored in state to avoid rerenders every tick; used only by demo
-    const parsed = new Set<number>()
-    // @ts-ignore: faultyInput may not exist if older builds
-    const fi = (typeof faultyInput === 'string') ? faultyInput : ''
-    fi.split(',').map((s:any)=>String(s).trim()).filter(Boolean).forEach((s:any)=>{ const v = parseInt(s,10); if(!isNaN(v)) parsed.add(v) })
-    faultySetRef.current = parsed
+  const startHistoricalReplay = useCallback(() => {
+    const replayUrl = buildReplayUrl()
+    setPlaybackPaused(true)
+    disconnect()
+    flushQueue()
+    setUrl(replayUrl)
+    window.setTimeout(() => {
+      connect()
+    }, 60)
+  }, [buildReplayUrl, connect, disconnect, flushQueue])
 
-    const tick = () => {
-      const t = performance.now()
-      const { seq, stage, r } = demoRef.current
-      const n = state.n
-      const bump = () => { localEidRef.current += 1; return localEidRef.current }
-      // Stage pacing
-      if (t < (demoRef.current as any).pauseUntil) return
-      const pause = (ms:number) => { (demoRef.current as any).pauseUntil = t + ms }
-      if (stage === 'client') {
-        dispatch({ kind: 'client', to: 0, t, eid: bump() })
-        dispatch({ kind: 'stage', label: 'Client Request', seq })
-        demoRef.current.stage = 'pp'
-        pause(350)
-        return
-      }
-      if (stage === 'pp') {
-        const to = Array.from({ length: Math.max(0, n - 1) }, (_, i) => i + 1)
-        dispatch({ kind: 'prePrepare', seq, from: 0, to, t, eid: bump() })
-        dispatch({ kind: 'stage', label: 'PrePrepare', seq })
-        demoRef.current.stage = 'prep'
-        demoRef.current.r = 0
-        pause(350)
-        return
-      }
-      if (stage === 'prep') {
-        if (r < n) {
-          // Honest replicas send Prepare; faulty ones skip
-          if (!(faultySetRef.current as any).has(r)) {
-            dispatch({ kind: 'prepare', from: r, t, eid: bump() })
-          }
-          dispatch({ kind: 'stage', label: 'Prepare', seq })
-          demoRef.current.r = r + 1
-          pause(180)
-        } else {
-          demoRef.current.stage = 'commit'
-          demoRef.current.r = 0
-          pause(250)
-        }
-        return
-      }
-      if (stage === 'commit') {
-        if (r < n) {
-          if (!(faultySetRef.current as any).has(r)) {
-            dispatch({ kind: 'commit', from: r, t, eid: bump() })
-          } else {
-            dispatch({ kind: 'prepare', from: r, t, eid: bump() })
-          }
-          dispatch({ kind: 'stage', label: 'Commit', seq })
-          demoRef.current.r = r + 1
-          pause(180)
-        } else {
-          // move to reply stage
-          ;(demoRef.current as any).stage = 'reply'
-          demoRef.current.r = 0
-          pause(250)
-        }
-        return
-      }
-      if ((demoRef.current as any).stage === 'reply') {
-        if (r < n) {
-          if (!(faultySetRef.current as any).has(r)) {
-            dispatch({ kind: 'reply', from: r, t, eid: bump() })
-          }
-          dispatch({ kind: 'stage', label: 'Reply', seq })
-          demoRef.current.r = r + 1
-          pause(140)
-        } else {
-          demoRef.current.stage = 'client'
-          demoRef.current.r = 0
-          demoRef.current.seq = seq + 1
-          pause(400)
-        }
-        return
-      }
-    }
-
-    const intervalMs = Math.max(1, Math.floor(1000 / Math.max(1, demoEps)))
-    demoTimerRef.current = window.setInterval(tick, intervalMs)
-    return () => {
-      if (demoTimerRef.current) clearInterval(demoTimerRef.current)
-      demoTimerRef.current = null
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demoRunning, demoEps, state.n, state.f, faultyInput])
-
-  // Manual init and step helpers
-  const initDemoManual = useCallback(() => {
-    dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
-    localEidRef.current = 0
-    demoRef.current = { seq: 1, stage: 'client', r: 0, pauseUntil: 0 }
-    const parsed = new Set<number>()
-    const fi = (typeof faultyInput === 'string') ? faultyInput : ''
-    fi.split(',').map(s=>s.trim()).filter(Boolean).forEach((s)=>{ const v = parseInt(s,10); if(!isNaN(v)) parsed.add(v) })
-    faultySetRef.current = parsed
-    manualInitializedRef.current = true
-  }, [dispatch, state.n, state.f, faultyInput])
-
-  const manualTick = useCallback(() => {
-    const t = performance.now()
-    const { seq, stage, r } = demoRef.current
-    const n = state.n
-    const bump = () => { localEidRef.current += 1; return localEidRef.current }
-    if (stage === 'client') {
-      dispatch({ kind: 'client', to: 0, t, eid: bump() })
-      dispatch({ kind: 'stage', label: 'Client Request', seq })
-      demoRef.current.stage = 'pp'
-      return
-    }
-    if (stage === 'pp') {
-      const to = Array.from({ length: Math.max(0, n - 1) }, (_, i) => i + 1)
-      dispatch({ kind: 'prePrepare', seq, from: 0, to, t, eid: bump() })
-      dispatch({ kind: 'stage', label: 'PrePrepare', seq })
-      demoRef.current.stage = 'prep'
-      demoRef.current.r = 0
-      return
-    }
-    if (stage === 'prep') {
-      if (r < n) {
-        if (!faultySetRef.current.has(r)) {
-          dispatch({ kind: 'prepare', from: r, t, eid: bump() })
-        }
-        dispatch({ kind: 'stage', label: 'Prepare', seq })
-        demoRef.current.r = r + 1
-      } else {
-        demoRef.current.stage = 'commit'
-        demoRef.current.r = 0
-      }
-      return
-    }
-    if (stage === 'commit') {
-      if (r < n) {
-        if (!faultySetRef.current.has(r)) {
-          dispatch({ kind: 'commit', from: r, t, eid: bump() })
-        }
-        dispatch({ kind: 'stage', label: 'Commit', seq })
-        demoRef.current.r = r + 1
-      } else {
-        demoRef.current.stage = 'client'
-        demoRef.current.r = 0
-        demoRef.current.seq = seq + 1
-      }
-      return
-    }
-  }, [dispatch, state.n])
+  const togglePlaybackPaused = useCallback(() => {
+    setPlaybackPaused((prev) => !prev)
+  }, [])
 
   return (
     <div className="app">
@@ -852,44 +744,47 @@ export default function App() {
           ) : (
             <button className="btn" onClick={disconnect}>Disconnect</button>
         )}
-          <input className="smallinput" type="number" min={1} max={240} value={demoEps} onChange={(e) => setDemoEps(parseInt(e.target.value || '60', 10) || 60)} />
-          <input type="range" min={1} max={240} value={demoEps} onChange={(e) => setDemoEps(parseInt(e.target.value || '60', 10) || 60)} />
-          <span style={{opacity:0.8, fontSize:12, marginLeft:6}}>{demoEps} eps</span>
-          {!demoRunning ? (
-            <button className="btn" onClick={() => setDemoRunning(true)}>Start Demo</button>
-          ) : (
-            <button className="btn" onClick={() => setDemoRunning(false)}>Stop Demo</button>
-          )}
-          <button className="btn" onClick={() => { if (demoRunning) setDemoRunning(false); if (!manualInitializedRef.current) initDemoManual(); manualTick(); }}>
-            Next Step
+          <button className="btn" onClick={startHistoricalReplay}>
+            Replay History
           </button>
-          <button className="btn" onClick={() => { setDemoRunning(true); }}>
-            Continue
-          </button>
-          <span style={{marginLeft: 8, opacity: 0.8}}>n</span>
-          <input className="smallinput" type="number" min={1} max={64} value={nInput}
-                 onChange={(e)=> setNInput(parseInt(e.target.value || '1', 10) || 1)} />
-          <span style={{marginLeft: 6, opacity: 0.8}}>f</span>
-          <input className="smallinput" type="number" min={0} max={20} value={fInput}
-                 onChange={(e)=> setFInput(parseInt(e.target.value || '0', 10) || 0)} />
-          <span style={{marginLeft: 6, opacity: 0.8}}>faulty</span>
-          <input className="smallinput" placeholder="e.g. 2,5" value={(typeof faultyInput==='string'? faultyInput : '') as any}
-                 onChange={(e)=> setFaultyInput(e.target.value)} />
-          <button className="btn" onClick={() => {
-            const nVal = Math.max(1, Math.floor(nInput))
-            const maxF = Math.floor((nVal - 1) / 3)
-            const fVal = Math.max(0, Math.min(maxF, Math.floor(fInput)))
-            dispatch({ kind: 'sessionStart', n: nVal, f: fVal })
-          }}>Apply</button>
           <span style={{marginLeft: 8, opacity: 0.8}}>Layout</span>
           <button className="btn" onClick={() => setLayout('ring')} disabled={layout==='ring'}>Ring</button>
           <button className="btn" onClick={() => setLayout('lanes')} disabled={layout==='lanes'}>Lanes</button>
         </div>
         <div className="right">
-          <span className={`status ${demoRunning ? 'connected' : status}`}>Status: {demoRunning ? 'demo' : status}</span>
-          <span className="eid">Endpoint: {url}</span>
-          <span className="eid">Last event: {lastEventSummary}</span>
-          <span className="eid">last eid: {state.lastEid ?? '-'}</span>
+          <span className={`status ${status}`}>Status: {status}</span>
+        </div>
+      </div>
+      <div className="playbackbar">
+        <div className="playback-group">
+          <label htmlFor="playbackDelay">Playback speed (events/s)</label>
+          <select
+            id="playbackDelay"
+            className="smallinput"
+            value={playbackDelay}
+            onChange={(e) => {
+              const next = parseInt(e.target.value, 10)
+              setPlaybackDelay(Number.isFinite(next) ? next : 250)
+            }}
+          >
+            {PLAYBACK_PRESETS_EPS.map((eps) => {
+              const delay = Math.round(1000 / eps)
+              return (
+                <option key={eps} value={delay}>
+                  {eps}
+                </option>
+              )
+            })}
+          </select>
+        </div>
+        <div className="playback-group">
+          <span className="eid">Queued events: {queuedEvents}</span>
+          <button className="btn" onClick={togglePlaybackPaused}>
+            {playbackPaused ? 'Resume' : 'Pause'}
+          </button>
+          <button className="btn" onClick={flushQueue} disabled={!queuedEvents}>
+            Clear queue
+          </button>
         </div>
       </div>
 
@@ -911,7 +806,7 @@ export default function App() {
             />
           </div>
           <div className="stagehud">
-            <div className="stagetext">Stage: {state.stageLabel} · seq: {state.stageSeq ?? '-'}</div>
+            <div className="stagetext">Stage: {state.stageLabel} - seq: {state.stageSeq ?? '-'}</div>
           </div>
           <div className="quorum">
             <div className="meter">
