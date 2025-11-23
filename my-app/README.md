@@ -6,14 +6,14 @@
 Populating the PBFT tool with the JSON inputs.
 Allows export of the current state.
 
-UI:
+#### Test 1 UI:
 ![alt text](<Screenshot 2025-11-03 162929.png>)
 ![alt text](<Screenshot 2025-11-03 170851.png>)
 
-Result:
+#### Test 1 Result:
 ![alt text](<Screenshot 2025-11-23 142122.png>)
 
-UI:
+#### Test 1 Updates:
 ![alt text](<Screenshot 2025-11-23 144355.png>)
 ![alt text](<Screenshot 2025-11-23 144906.png>)
 
