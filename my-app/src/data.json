@@ -1,64 +1,82 @@
-{
-    "replicas": [
-        {
-            "replicaId": 1,
-            "action": "pre-prepare",
-            "timestamp": "00:00:00",
-            "destination": 3
-        },
-        {
-            "replicaId": 1,
-            "action": "prepare",
-            "timestamp": "00:00:00",
-            "destination": 3
-        },
-        {
-            "replicaId": 1,
-            "action": "propose",
-            "timestamp": "00:00:00",
-            "destination": 3
-        },
-        {
-            "replicaId": 1,
-            "action": "commit",
-            "timestamp": "00:00:00",
-            "destination": 3
-        },
-        {
-            "replicaId": 2,
-            "action": "pre-prepare",
-            "timestamp": "00:00:00",
-            "destination": 3
-        },
-        {
-            "replicaId": 2,
-            "action": "prepare",
-            "timestamp": "00:00:00",
-            "destination": 3
-        },
-        {
-            "replicaId": 1,
-            "action": "reply",
-            "timestamp": "00:00:00",
-            "destination": 3
-        },
-        {
-            "replicaId": 2,
-            "action": "propose",
-            "timestamp": "00:00:00",
-            "destination": 3
-        },
-        {
-            "replicaId": 2,
-            "action": "commit",
-            "timestamp": "00:00:00",
-            "destination": 3
-        },
-        {
-            "replicaId": 2,
-            "action": "reply",
-            "timestamp": "00:00:00",
-            "destination": 3
-        }
-    ]
-}
+[
+    {
+        "action": "PREPREPARE",
+        "replica": "Replica1",
+        "replicaId": 1,
+        "actionId": 2,
+        "timestamp": "000001",
+        "destination": 3
+    },
+    {
+        "action": "PREPARE",
+        "replica": "Replica1",
+        "replicaId": 1,
+        "actionId": 3,
+        "timestamp": "000002",
+        "destination": 3
+    },
+    {
+        "action": "PROPOSE",
+        "replica": "Replica1",
+        "replicaId": 1,
+        "actionId": 4,
+        "timestamp": "000003",
+        "destination": 3
+    },
+    {
+        "action": "COMMIT",
+        "replica": "Replica1",
+        "replicaId": 1,
+        "actionId": 5,
+        "timestamp": "000004",
+        "destination": 3
+    },
+    {
+        "action": "PREPREPARE",
+        "replica": "Replica2",
+        "replicaId": 2,
+        "actionId": 2,
+        "timestamp": "000005",
+        "destination": 3
+    },
+    {
+        "action": "PREPARE",
+        "replica": "Replica2",
+        "replicaId": 2,
+        "actionId": 3,
+        "timestamp": "000006",
+        "destination": 3
+    },
+    {
+        "action": "REPLY",
+        "replica": "Replica1",
+        "replicaId": 1,
+        "actionId": 6,
+        "timestamp": "000007",
+        "destination": 3
+    },
+    {
+        "action": "PROPOSE",
+        "replica": "Replica2",
+        "replicaId": 2,
+        "actionId": 4,
+        "timestamp": "000008",
+        "destination": 3
+    },
+    {
+        "action": "COMMIT",
+        "replica": "Replica2",
+        "replicaId": 2,
+        "actionId": 5,
+        "timestamp": "000009",
+        "destination": 3
+    },
+    {
+        "action": "REPLY",
+        "replica": "Replica2",
+        "replicaId": 2,
+        "actionId": 5,
+        "timestamp": "000010",
+        "destination": 3
+    }
+]
