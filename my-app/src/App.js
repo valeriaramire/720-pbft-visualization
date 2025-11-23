@@ -6,7 +6,11 @@ import Chart, {
   ArgumentAxis,
   ValueAxis,
   CommonAxisSettings,
-  CommonAxisSettingsTitle
+  CommonAxisSettingsTitle,
+  Export,
+  Legend,
+  Label, 
+  Series
 } from 'devextreme-react/chart';
 
 //https://js.devexpress.com/React/Documentation/ApiReference/UI_Components/dxChart/Configuration/valueAxis/grid/
@@ -35,15 +39,29 @@ const yaxisoptions = [
 class App extends React.Component {
     render() {
         return (
-            <Chart>
+            <Chart
+              title="pBFT Visualization Tool"
+              dataSource={data}
+              id="chart"
+            >
                 <ArgumentAxis
                     categories={xaxisoptions}
-                    valueField="PBFT"
                 />
                 <ValueAxis
                     categories={yaxisoptions}
-                    valueField="PBFT"
                 />
+                <Series
+                      valueField="replica"
+                      argumentField="action"
+                      type"line"
+                      color="black"
+                >
+                        <Label 
+                            visible={true}
+                            backgroundColor="grey"
+                        />
+                </Series>
+                <Legend visible={false} />
                 <CommonAxisSettings>
                     <Grid
                     visible={true}
@@ -52,9 +70,12 @@ class App extends React.Component {
                     width={1}
                 />
                 </CommonAxisSettings>
+                <Export enabled={true} />
             </Chart>
         );
     }
 }
 
 export default App;
+
+//https://js.devexpress.com/React/Demos/WidgetsGallery/Demo/Charts/AjaxRequest/MaterialLimeLight/
