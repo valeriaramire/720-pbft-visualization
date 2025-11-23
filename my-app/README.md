@@ -15,6 +15,7 @@ Result:
 
 UI:
 ![alt text](<Screenshot 2025-11-23 144355.png>)
+![alt text](<Screenshot 2025-11-23 144906.png>)
 
 ### Start and Stop button
 Start and stop the populating the tool with inputs.
