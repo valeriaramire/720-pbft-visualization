@@ -5,7 +5,6 @@
         "replicaId": 1,
         "actionId": 2,
         "timestamp": "000001",
-        "destination": 3
     },
     {
         "action": "PREPARE",
@@ -13,7 +12,6 @@
         "replicaId": 1,
         "actionId": 3,
         "timestamp": "000002",
-        "destination": 3
     },
     {
         "action": "PROPOSE",
@@ -21,7 +19,6 @@
         "replicaId": 1,
         "actionId": 4,
         "timestamp": "000003",
-        "destination": 3
     },
     {
         "action": "COMMIT",
@@ -29,7 +26,6 @@
         "replicaId": 1,
         "actionId": 5,
         "timestamp": "000004",
-        "destination": 3
     },
     {
         "action": "PREPREPARE",
@@ -37,7 +33,6 @@
         "replicaId": 2,
         "actionId": 2,
         "timestamp": "000005",
-        "destination": 3
     },
     {
         "action": "PREPARE",
@@ -45,7 +40,6 @@
         "replicaId": 2,
         "actionId": 3,
         "timestamp": "000006",
-        "destination": 3
     },
     {
         "action": "REPLY",
@@ -53,7 +47,6 @@
         "replicaId": 1,
         "actionId": 6,
         "timestamp": "000007",
-        "destination": 3
     },
     {
         "action": "PROPOSE",
@@ -61,7 +54,6 @@
         "replicaId": 2,
         "actionId": 4,
         "timestamp": "000008",
-        "destination": 3
     },
     {
         "action": "COMMIT",
@@ -69,7 +61,6 @@
         "replicaId": 2,
         "actionId": 5,
         "timestamp": "000009",
-        "destination": 3
     },
     {
         "action": "REPLY",
@@ -77,6 +68,5 @@
         "replicaId": 2,
         "actionId": 5,
         "timestamp": "000010",
-        "destination": 3
     }
 ]
