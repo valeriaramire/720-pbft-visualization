@@ -14,6 +14,7 @@ root.render(
     <div></div>
     <h4>View the PBFT Visualization</h4>
     <App />
+    <h4>Timestamp: {sampleData.timestamp} </h4>
     
   </React.StrictMode>
 );
