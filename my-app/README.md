@@ -1,6 +1,5 @@
 # PBFT Visualization Tool 2025
-
-## Testing
+## Testing and Starter App 
 
 ### Test 1
 Populating the PBFT tool with the JSON inputs.
