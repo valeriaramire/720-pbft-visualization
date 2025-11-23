@@ -68,5 +68,40 @@
         "replicaId": 2,
         "actionId": 5,
         "timestamp": "000010",
+    },
+    {
+        "action": "COMMIT",
+        "replica": "Replica3",
+        "replicaId": 3,
+        "actionId": 4,
+        "timestamp": "000011",
+    },
+    {
+        "action": "PREPARE",
+        "replica": "Replica4",
+        "replicaId": 4,
+        "actionId": 3,
+        "timestamp": "000012",
+    },
+    {
+        "action": "PREPARE",
+        "replica": "Replica5",
+        "replicaId": 5,
+        "actionId": 3,
+        "timestamp": "000013",
+    },
+    {
+        "action": "PREPARE",
+        "replica": "Replica6",
+        "replicaId": 6,
+        "actionId": 3,
+        "timestamp": "000014",
+    },
+    {
+        "action": "PREPARE",
+        "replica": "Replica7",
+        "replicaId": 7,
+        "actionId": 3,
+        "timestamp": "000015",
     }
 ]
