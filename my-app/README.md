@@ -4,6 +4,7 @@
 
 ### Test 1
 Populating the PBFT tool with the JSON inputs.
+Allows export of the current state.
 
 UI:
 ![alt text](<Screenshot 2025-11-03 162929.png>)
@@ -12,18 +13,21 @@ UI:
 Result:
 ![alt text](<Screenshot 2025-11-23 142122.png>)
 
-
 ### Start and Stop button
-Start and stop populating the tool with inputs.
-Input:
+Start and stop the populating the tool with inputs.
 Result:
-Input:
 Result:
 
-### Changing Number of Replicas
-Add more replicas in the visualization.
-Original:
-Input:
+### Auto changing the number of Replicas
+Add or remove replicas in the visualization.
+Result:
+
+### Include user inputs in the JSON inputs
+Auto add events to JSON stream.
+Result:
+
+### Include timestamps during stream
+Show the timestamp of the latest event/state.
 Result:
 
 # How to Run
