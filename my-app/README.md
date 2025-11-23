@@ -18,21 +18,20 @@ Allows export of the current state.
 ![alt text](<Screenshot 2025-11-23 144906.png>)
 
 ### Start and Stop button
-Start and stop the populating the tool with inputs.
-Result:
-Result:
+Start and stop the populating the tool with inputs. Use Switch
+Solution: Start=Begin stream, Pause=Stop at current state, Stop=Empty grid
 
 ### Auto changing the number of Replicas
-Add or remove replicas in the visualization.
-Result:
+Add or remove replicas in the visualization. Use Range Slider
+Solution: Add or remove replicas from the options list (type const). 
 
 ### Include user inputs in the JSON inputs
 Auto add events to JSON stream.
-Result:
+Solution: Add or remove events from the JSON file. Modify the JSON file. 
 
 ### Include timestamps during stream
 Show the timestamp of the latest event/state.
-Result:
+Solution: Print timestamp of current event.
 
 # How to Run
 cd my-app
