@@ -5,6 +5,12 @@ export type LaneScrollMetrics = {
   virtualHeight?: number
 }
 
+export type HoverInfo = {
+  x: number
+  y: number
+  label: string
+}
+
 type CanvasPanelProps = {
   canvasRef: React.RefObject<HTMLCanvasElement>
   canvasWrapRef: React.RefObject<HTMLDivElement>
@@ -14,6 +20,7 @@ type CanvasPanelProps = {
   quorumProgress: number
   commitCount: number
   quorumThreshold: number
+  hoverInfo: HoverInfo | null
 }
 
 export default function CanvasPanel({
@@ -25,6 +32,7 @@ export default function CanvasPanel({
   quorumProgress,
   commitCount,
   quorumThreshold,
+  hoverInfo,
 }: CanvasPanelProps) {
   const scrollClass = `canvas-scroll${laneScroll.needScroll ? ' is-scrollable' : ''}`
   const canvasStyle = laneScroll.virtualHeight ? { height: laneScroll.virtualHeight } : undefined
@@ -42,6 +50,11 @@ export default function CanvasPanel({
         </div>
         <div className="label">Commit quorum: {commitCount} / {quorumThreshold}</div>
       </div>
+      {hoverInfo && (
+        <div className="hovercard" style={{ left: hoverInfo.x + 12, top: hoverInfo.y + 12 }}>
+          {hoverInfo.label}
+        </div>
+      )}
     </div>
   )
 }

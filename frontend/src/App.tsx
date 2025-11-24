@@ -10,24 +10,31 @@ import {
   LANE_PREFERRED_SPACING,
   LANE_SCROLL_FALLBACK_THRESHOLD,
   LANE_TOP_OFFSET,
+  MessageMarker,
 } from './hooks/useCanvasRenderer'
 import { initialState, reducer } from './state'
 import type { Envelope, LayoutMode } from './types'
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
-  const [url, setUrl] = useState('ws://localhost:8080/ws/events')
+  const [mode, setMode] = useState<'demo' | 'live'>('demo')
+  const [url, setUrl] = useState('http://localhost:8080/sse/events')
   const [demoRunning, setDemoRunning] = useState(false)
   const [demoEps, setDemoEps] = useState(3)
   const [nInput, setNInput] = useState<number>(initialState.n)
   const [fInput, setFInput] = useState<number>(initialState.f)
   const [faultyInput, setFaultyInput] = useState<string>('')
   const [layout, setLayout] = useState<LayoutMode>('ring')
+  const [liveMessage, setLiveMessage] = useState<string>('')
+  const [paused, setPaused] = useState(false)
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasWrapRef = useRef<HTMLDivElement>(null)
   const faultySetRef = useRef<Set<number>>(new Set())
   const [canvasViewportHeight, setCanvasViewportHeight] = useState(0)
+  const markerRef = useRef<MessageMarker[]>([])
+  const [hoverInfo, setHoverInfo] = useState<MessageMarker | null>(null)
+  const logicalTimeRef = useRef<number | null>(null)
 
   useEffect(() => {
     lastEidRef.current = state.lastEid
@@ -47,7 +54,7 @@ export default function App() {
   }, [])
 
   const onEvent = useCallback((env: Envelope) => {
-    const t = performance.now()
+    const t = logicalTimeRef.current ?? performance.now()
     if (env.type === 'SessionStart') {
       dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
       return
@@ -82,14 +89,57 @@ export default function App() {
 
   useEffect(() => {
     dispatch({ kind: 'connected', value: status === 'connected' })
-  }, [status])
+    if (status === 'connected' && demoRunning) {
+      setDemoRunning(false)
+    }
+  }, [status, demoRunning])
+
+  useEffect(() => {
+    let raf = 0
+    const loop = () => {
+      if (!paused) {
+        logicalTimeRef.current = performance.now()
+      }
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [paused])
 
   useEffect(() => {
     setNInput(state.n)
     setFInput(state.f)
   }, [state.n, state.f])
 
-  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout)
+  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, logicalTimeRef)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const handleMove = (ev: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect()
+      const x = ev.clientX - rect.left
+      const y = ev.clientY - rect.top
+      let best: MessageMarker | null = null
+      let bestDist = 14
+      for (const m of markerRef.current) {
+        const dx = m.x - x
+        const dy = m.y - y
+        const d2 = Math.sqrt(dx * dx + dy * dy)
+        if (d2 < bestDist) {
+          best = m
+          bestDist = d2
+        }
+      }
+      setHoverInfo(best)
+    }
+    const handleLeave = () => setHoverInfo(null)
+    canvas.addEventListener('mousemove', handleMove)
+    canvas.addEventListener('mouseleave', handleLeave)
+    return () => {
+      canvas.removeEventListener('mousemove', handleMove)
+      canvas.removeEventListener('mouseleave', handleLeave)
+    }
+  }, [])
 
   const laneScrollMetrics = useMemo<LaneScrollMetrics>(() => {
     if (layout !== 'lanes') return { needScroll: false, virtualHeight: undefined }
@@ -141,7 +191,8 @@ export default function App() {
     faultySetRef.current = parsed
 
     const tick = () => {
-      const t = performance.now()
+      if (paused) return
+      const t = logicalTimeRef.current ?? performance.now()
       const { seq, stage, r } = demoRef.current
       const n = state.n
       const bump = () => {
@@ -222,7 +273,7 @@ export default function App() {
       if (demoTimerRef.current) clearInterval(demoTimerRef.current)
       demoTimerRef.current = null
     }
-  }, [demoRunning, demoEps, state.n, state.f, faultyInput, dispatch])
+  }, [demoRunning, demoEps, state.n, state.f, faultyInput, dispatch, paused])
 
   const initDemoManual = useCallback(() => {
     dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
@@ -243,7 +294,7 @@ export default function App() {
   }, [dispatch, state.n, state.f, faultyInput])
 
   const manualTick = useCallback(() => {
-    const t = performance.now()
+    const t = logicalTimeRef.current ?? performance.now()
     const { seq, stage, r } = demoRef.current
     const n = state.n
     const bump = () => {
@@ -293,6 +344,21 @@ export default function App() {
     }
   }, [dispatch, state.n])
 
+  const handleConnect = useCallback(() => {
+    if (demoRunning) setDemoRunning(false)
+    connect()
+  }, [connect, demoRunning])
+
+  const handleToggleMode = useCallback(() => {
+    if (mode === 'demo') {
+      setDemoRunning(false)
+      setMode('live')
+    } else {
+      disconnect()
+      setMode('demo')
+    }
+  }, [mode, disconnect])
+
   const handleApplyConfig = useCallback(() => {
     const nVal = Math.max(1, Math.floor(nInput))
     const maxF = Math.floor((nVal - 1) / 3)
@@ -306,23 +372,43 @@ export default function App() {
     manualTick()
   }, [demoRunning, initDemoManual, manualTick])
 
-  const handleStartDemo = useCallback(() => setDemoRunning(true), [])
-  const handleStopDemo = useCallback(() => setDemoRunning(false), [])
+  const handleStartDemo = useCallback(() => {
+    setPaused(false)
+    setDemoRunning(true)
+  }, [])
+  const handleStopDemo = useCallback(() => {
+    setDemoRunning(false)
+    setPaused(false)
+  }, [])
 
-  const statusLabel = demoRunning ? 'demo' : status
-  const statusClass = demoRunning ? 'connected' : status
+  const handleSendLiveMessage = useCallback(() => {
+    // TODO: hook into backend send endpoint when available
+    console.log('Live message send requested:', liveMessage)
+  }, [liveMessage])
+
+  const statusLabel = mode === 'demo' ? (demoRunning ? 'demo' : 'idle') : status
+  const statusClass = mode === 'demo' && demoRunning ? 'connected' : status
+
+  const handleTogglePause = useCallback(() => {
+    setPaused((p) => !p)
+  }, [])
 
   return (
     <div className="app">
       <TopBar
+        mode={mode}
+        onToggleMode={handleToggleMode}
         url={url}
         connectionStatus={status}
         statusClass={statusClass}
         statusLabel={statusLabel}
         lastEid={state.lastEid}
         onUrlChange={setUrl}
-        onConnect={connect}
+        onConnect={handleConnect}
         onDisconnect={disconnect}
+        liveMessage={liveMessage}
+        onLiveMessageChange={setLiveMessage}
+        onSendLiveMessage={handleSendLiveMessage}
         demoRunning={demoRunning}
         onStartDemo={handleStartDemo}
         onStopDemo={handleStopDemo}
@@ -339,6 +425,8 @@ export default function App() {
         onApplyConfig={handleApplyConfig}
         layout={layout}
         onLayoutChange={setLayout}
+        paused={paused}
+        onTogglePause={handleTogglePause}
       />
       <div className="content">
         <Sidebar
@@ -358,6 +446,7 @@ export default function App() {
           quorumProgress={quorumProgress}
           commitCount={state.commits.size}
           quorumThreshold={quorumThreshold}
+          hoverInfo={hoverInfo}
         />
       </div>
     </div>
