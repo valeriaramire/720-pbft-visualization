@@ -18,7 +18,7 @@ import type { Envelope, LayoutMode } from './types'
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [mode, setMode] = useState<'demo' | 'live'>('demo')
-  const [url, setUrl] = useState('http://localhost:8080/sse/events')
+  const [url, setUrl] = useState('http://localhost:8002/stream')
   const [demoRunning, setDemoRunning] = useState(false)
   const [demoEps, setDemoEps] = useState(3)
   const [nInput, setNInput] = useState<number>(initialState.n)
