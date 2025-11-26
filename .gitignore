@@ -1,2 +1,112 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.pytest_cache/
+venv/
+.env
+.env.*
+.env.local
+*.sqlite3
+
+# Byte-compiled / distribution
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# Virtual environments
+env/
+venv/
+ENV/
+venv.bak/
+
+# VS Code
+.vscode/
+.history/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+# Lockfiles are tracked for reproducible installs; drop this comment to ignore them again.
+
+# Vite / TypeScript
+dist/
+*.tsbuildinfo
+.vite/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# C/C++ build artifacts
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.elf
+/build/
+/bin/
+/*.exe
+/*.out
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Docker
+docker-compose.override.yml
+**/docker-compose.override.yml
+**/docker-compose.*.yml
+*.env
+
+# Redpanda / brokers / message queues
+redpanda-broker/data/
+redpanda-broker/*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Home directory artifacts (since repo lives at $HOME in Codespaces)
+.bash_history
+.bash_logout
+.bashrc
+.cache/
+.codex/
+.dotnet/
+.npm/
+.profile
+.ssh/
+.vscode-server/
+.wget-hsts
+
+# JetBrains
+.idea/
+
+# Misc
+*.swp
+*~
+
+# Project specific
+api/__pycache__/
+api/*.pyc
+frontend/dist/
 frontend/node_modules/
-**/frontend/node_modules/
+
+# Ignore compiled C++ demo (if any)
+codes/wandlr
+
+# allow override by adding an explicit tracked file
+!/.gitignore
+.gitconfig

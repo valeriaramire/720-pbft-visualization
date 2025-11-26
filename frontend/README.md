@@ -1,6 +1,6 @@
 # PBFT Frontend
 
-Interactive visualization for the PBFT simulator. Built with React + Vite and tailored for streaming NDJSON events from the backend.
+Interactive visualization for the PBFT simulator. Built with React + Vite and tailored for streaming JSON events from the backend.
 
 ## Quick Start
 
@@ -11,7 +11,7 @@ npm run dev    # starts Vite dev server
 npm run build  # type-check + production bundle
 ```
 
-The UI defaults to `ws://localhost:8080/ws/events`. Update the URL field in the top bar if your backend runs elsewhere.
+The UI defaults to `http://localhost:8080/sse/events` (SSE). Update the URL field in the top bar if your backend runs elsewhere.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ The UI defaults to `ws://localhost:8080/ws/events`. Update the URL field in the 
 - **`src/state.ts`** – initial state + reducer logic for PBFT stages/messages.
 - **`src/types.ts`** – shared type definitions for envelopes, pulses, layout modes, etc.
 - **`src/hooks/`**
-  - `useNDJSONSocket.ts` – WebSocket connector that parses NDJSON lines and reconnects with backoff.
+  - `useNDJSONSocket.ts` – SSE connector that parses JSON log updates and reconnects automatically.
   - `useCanvasRenderer.ts` – all canvas drawing for ring/lanes layouts (exporting lane layout constants).
 - **`src/components/`**
   - `TopBar.tsx` – controls for connectivity, demo pacing, node counts, layout toggle.
@@ -33,7 +33,7 @@ Use the **Start Demo/Stop Demo/Next Step** controls to simulate PBFT phases loca
 
 ## Event Stream Format
 
-The frontend expects NDJSON envelopes with the fields defined in `src/types.ts` (`Envelope`). Each line should be JSON-encoded and terminated with `\n`. When reconnecting, the client resumes from the last seen `eid` by appending `?from_eid=<last+1>` to the WebSocket URL.
+The frontend expects one JSON envelope per SSE message with the fields defined in `src/types.ts` (`Envelope`). When reconnecting, the client resumes from the last seen `eid` by appending `?from_eid=<last+1>` to the SSE URL (or using `Last-Event-ID` if provided).
 
 ## Troubleshooting
 

@@ -3,15 +3,14 @@ import type { Envelope } from '../types'
 
 type SocketStatus = 'disconnected' | 'connecting' | 'connected'
 
+// SSE-based JSON stream consumer. Keeps the same API as the prior WebSocket hook.
 export function useNDJSONSocket(
   urlStr: string,
   onEvent: (env: Envelope) => void,
   lastEidRef: React.MutableRefObject<number | null>,
 ) {
   const [status, setStatus] = useState<SocketStatus>('disconnected')
-  const wsRef = useRef<WebSocket | null>(null)
-  const bufferRef = useRef<string>('')
-  const retryRef = useRef<number>(0)
+  const esRef = useRef<EventSource | null>(null)
   const baseUrlRef = useRef<string>(urlStr)
 
   useEffect(() => {
@@ -19,7 +18,7 @@ export function useNDJSONSocket(
   }, [urlStr])
 
   const connect = useCallback(() => {
-    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+    if (esRef.current && esRef.current.readyState !== EventSource.CLOSED) {
       return
     }
     setStatus('connecting')
@@ -30,55 +29,38 @@ export function useNDJSONSocket(
       u.searchParams.set('from_eid', String(last + 1))
       urlToUse = u.toString()
     }
-    const ws = new WebSocket(urlToUse)
-    wsRef.current = ws
-    bufferRef.current = ''
+    const es = new EventSource(urlToUse)
+    esRef.current = es
 
-    ws.onopen = () => {
+    es.onopen = () => {
       setStatus('connected')
-      retryRef.current = 0
     }
-    ws.onmessage = (ev) => {
-      const data = typeof ev.data === 'string' ? ev.data : ''
-      bufferRef.current += data
-      let idx
-      while ((idx = bufferRef.current.indexOf('\n')) >= 0) {
-        const line = bufferRef.current.slice(0, idx).trim()
-        bufferRef.current = bufferRef.current.slice(idx + 1)
-        if (!line) continue
-        try {
-          const obj = JSON.parse(line) as Envelope
-          onEvent(obj)
-        } catch {
-          // ignore malformed payloads
-        }
-      }
-    }
-    ws.onclose = () => {
-      setStatus('disconnected')
-      const baseDelay = 300
-      const attempt = Math.min(6, retryRef.current)
-      const delay = baseDelay * Math.pow(2, attempt)
-      retryRef.current += 1
-      setTimeout(() => connect(), delay)
-    }
-    ws.onerror = () => {
+    es.onmessage = (ev) => {
+      // Server sends one JSON envelope per SSE message.
+      const data = typeof ev.data === 'string' ? ev.data.trim() : ''
+      if (!data) return
       try {
-        ws.close()
+        const obj = JSON.parse(data) as Envelope
+        onEvent(obj)
       } catch {
-        // ignore
+        // ignore malformed payloads
       }
+      // Updates from the server may include lastEventId; mirror into ref
+      if (ev.lastEventId) {
+        const parsed = parseInt(ev.lastEventId, 10)
+        if (!isNaN(parsed)) lastEidRef.current = parsed
+      }
+    }
+    es.onerror = () => {
+      setStatus('connecting')
+      // EventSource retries automatically; nothing else to do here.
     }
   }, [onEvent, lastEidRef])
 
   const disconnect = useCallback(() => {
-    if (wsRef.current) {
-      try {
-        wsRef.current.close()
-      } catch {
-        // ignore
-      }
-      wsRef.current = null
+    if (esRef.current) {
+      esRef.current.close()
+      esRef.current = null
       setStatus('disconnected')
     }
   }, [])

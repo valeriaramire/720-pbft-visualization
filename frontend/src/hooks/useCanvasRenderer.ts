@@ -24,12 +24,20 @@ function computeRingNodeRadius(width: number, height: number, orbitRadius: numbe
   return clamp(target, MIN_NODE_RADIUS, MAX_NODE_RADIUS)
 }
 
+export type MessageMarker = {
+  x: number
+  y: number
+  label: string
+}
+
 export function useCanvasRenderer(
   state: State,
   primaryId: number,
   canvasRef: React.RefObject<HTMLCanvasElement>,
   faultySet?: Set<number>,
   mode: LayoutMode = 'ring',
+  markersRef?: React.MutableRefObject<MessageMarker[]>,
+  timeRef?: React.MutableRefObject<number | null>,
 ) {
   const colors = {
     bg: '#0f1424',
@@ -46,6 +54,7 @@ export function useCanvasRenderer(
   }
 
   const draw = useCallback(() => {
+    if (markersRef) markersRef.current = []
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
@@ -121,55 +130,78 @@ export function useCanvasRenderer(
         ctx.fillText(`Replica ${i}`, 12, y + 4)
       }
 
-      const now = performance.now()
+      const now = timeRef?.current ?? performance.now()
       const PULSE_MS = 1800
       const messages = state.messages.filter((m) => now - m.t < PULSE_MS)
       const laneY = (idx: number) => top + ((bottom - top) * (idx + 1)) / (lanes - 1)
 
+      const drawDiamond = (sx: number, sy: number, tx: number, ty: number, progress: number, label: string, color: string) => {
+        const x = sx + (tx - sx) * progress
+        const y = sy + (ty - sy) * progress
+        const r = 3.5
+        ctx.save()
+        ctx.translate(x, y)
+        ctx.rotate(Math.PI / 4)
+        ctx.fillStyle = color
+        ctx.fillRect(-r, -r, r * 2, r * 2)
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+        ctx.lineWidth = 1
+        ctx.strokeRect(-r, -r, r * 2, r * 2)
+        ctx.restore()
+        if (markersRef) markersRef.current.push({ x, y, label })
+      }
+
       for (const m of messages) {
         const age = now - m.t
-        const alpha = 1 - Math.min(1, age / PULSE_MS)
+        const progress = Math.min(1, age / PULSE_MS)
         if (m.type === 'Client') {
-          ctx.strokeStyle = `rgba(134, 224, 255, ${alpha.toFixed(3)})`
-          ctx.lineWidth = 2
+          // path: client row at Request to primary row at PrePrepare
+          ctx.strokeStyle = 'rgba(134, 224, 255, 0.35)'
+          ctx.lineWidth = 1
           ctx.beginPath()
           ctx.moveTo(reqX, clientY)
           ctx.lineTo(ppX, laneY(0))
           ctx.stroke()
+          drawDiamond(reqX, clientY, ppX, laneY(0), progress, 'Client→Primary', colors.client)
           continue
         }
         if (m.type === 'PrePrepare' && m.to && m.to.length) {
-          ctx.strokeStyle = `rgba(126,183,255,${alpha.toFixed(3)})`
           for (const j of m.to) {
+            ctx.strokeStyle = 'rgba(126,183,255,0.35)'
+            ctx.lineWidth = 1
             ctx.beginPath()
             ctx.moveTo(ppX, laneY(m.from))
             ctx.lineTo(prepX, laneY(j))
             ctx.stroke()
+            drawDiamond(ppX, laneY(m.from), prepX, laneY(j), progress, `PrePrepare ${m.from}→${j}`, colors.preprepare)
           }
           continue
         }
         if (m.type === 'Prepare' || m.type === 'Commit') {
           const x = m.type === 'Prepare' ? prepX : comX
           const x2 = m.type === 'Prepare' ? comX : comFanX
-          const color = m.type === 'Prepare' ? '255,158,87' : '102,208,139'
-          ctx.strokeStyle = `rgba(${color},${alpha.toFixed(3)})`
+          const color = m.type === 'Prepare' ? colors.prepare : colors.commit
           for (let j = 0; j < n; j++) {
             if (j === m.from) continue
             if (m.type === 'Prepare' && m.from === 0) continue
+            ctx.strokeStyle = `rgba(${m.type === 'Prepare' ? '255,158,87' : '102,208,139'},0.3)`
+            ctx.lineWidth = 1
             ctx.beginPath()
             ctx.moveTo(x, laneY(m.from))
             ctx.lineTo(x2, laneY(j))
             ctx.stroke()
+            drawDiamond(x, laneY(m.from), x2, laneY(j), progress, `${m.type} ${m.from}→${j}`, color)
           }
           continue
         }
         if (m.type === 'Reply') {
-          ctx.strokeStyle = `rgba(255,217,74,${alpha.toFixed(3)})`
-          ctx.lineWidth = 2
+          ctx.strokeStyle = 'rgba(255,217,74,0.35)'
+          ctx.lineWidth = 1
           ctx.beginPath()
           ctx.moveTo(comFanX, laneY(m.from))
           ctx.lineTo(repX, clientY)
           ctx.stroke()
+          drawDiamond(comFanX, laneY(m.from), repX, clientY, progress, `Reply ${m.from}→client`, colors.reply)
           continue
         }
       }
@@ -218,7 +250,7 @@ export function useCanvasRenderer(
       return
     }
 
-    const now = performance.now()
+    const now = timeRef?.current ?? performance.now()
     const PULSE_MS = 1800
     const messages = state.messages.filter((m) => now - m.t < PULSE_MS)
 
@@ -231,29 +263,47 @@ export function useCanvasRenderer(
     ctx.font = '12px system-ui, sans-serif'
     ctx.textAlign = 'center'
     ctx.fillText('Client', clientPos.x, clientPos.y - 10)
+    const drawDiamond = (sx: number, sy: number, tx: number, ty: number, progress: number, label: string, color: string) => {
+      const x = sx + (tx - sx) * progress
+      const y = sy + (ty - sy) * progress
+      const r = Math.max(3, nodeR * 0.4)
+      ctx.save()
+      ctx.translate(x, y)
+      ctx.rotate(Math.PI / 4)
+      ctx.fillStyle = color
+      ctx.fillRect(-r, -r, r * 2, r * 2)
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'
+      ctx.lineWidth = 1
+      ctx.strokeRect(-r, -r, r * 2, r * 2)
+      ctx.restore()
+      if (markersRef) markersRef.current.push({ x, y, label })
+    }
+
     for (const m of messages) {
       const age = now - m.t
-      const alpha = 1 - Math.min(1, age / PULSE_MS)
+      const progress = Math.min(1, age / PULSE_MS)
       if (m.type === 'Client' && m.to && m.to.length) {
         const q = positions[primaryId]
-        ctx.strokeStyle = `rgba(134, 224, 255, ${alpha.toFixed(3)})`
-        ctx.lineWidth = 2
+        ctx.strokeStyle = 'rgba(134, 224, 255, 0.35)'
+        ctx.lineWidth = 1
         ctx.beginPath()
         ctx.moveTo(clientPos.x, clientPos.y)
         ctx.lineTo(q.x, q.y)
         ctx.stroke()
+        drawDiamond(clientPos.x, clientPos.y, q.x, q.y, progress, `Client→${primaryId}`, colors.client)
         continue
       }
       if (m.type === 'PrePrepare' && m.to && m.to.length > 0) {
         const p = positions[m.from]
         for (const j of m.to) {
           const q = positions[j]
-          ctx.strokeStyle = `rgba(126, 183, 255, ${alpha.toFixed(3)})`
-          ctx.lineWidth = 2
+          ctx.strokeStyle = 'rgba(126, 183, 255, 0.35)'
+          ctx.lineWidth = 1
           ctx.beginPath()
           ctx.moveTo(p.x, p.y)
           ctx.lineTo(q.x, q.y)
           ctx.stroke()
+          drawDiamond(p.x, p.y, q.x, q.y, progress, `PrePrepare ${m.from}→${j}`, colors.preprepare)
         }
       }
       if (m.type === 'Prepare' || m.type === 'Commit') {
@@ -261,24 +311,24 @@ export function useCanvasRenderer(
         for (let j = 0; j < positions.length; j++) {
           if (j === m.from) continue
           const q = positions[j]
-          const color = m.type === 'Prepare' ? '255, 158, 87' : '102, 208, 139'
-          ctx.strokeStyle = `rgba(${color}, ${alpha.toFixed(3)})`
-          ctx.lineWidth = 1.5
+          ctx.strokeStyle = `rgba(${m.type === 'Prepare' ? '255, 158, 87' : '102, 208, 139'},0.3)`
+          ctx.lineWidth = 1
           ctx.beginPath()
           ctx.moveTo(p.x, p.y)
           ctx.lineTo(q.x, q.y)
           ctx.stroke()
+          drawDiamond(p.x, p.y, q.x, q.y, progress, `${m.type} ${m.from}→${j}`, m.type === 'Prepare' ? colors.prepare : colors.commit)
         }
       }
       if (m.type === 'Reply') {
-        const q = clientPos
         const p = positions[m.from]
-        ctx.strokeStyle = `rgba(255, 217, 74, ${alpha.toFixed(3)})`
-        ctx.lineWidth = 2
+        ctx.strokeStyle = 'rgba(255, 217, 74, 0.35)'
+        ctx.lineWidth = 1
         ctx.beginPath()
         ctx.moveTo(p.x, p.y)
-        ctx.lineTo(q.x, q.y)
+        ctx.lineTo(clientPos.x, clientPos.y)
         ctx.stroke()
+        drawDiamond(p.x, p.y, clientPos.x, clientPos.y, progress, `Reply ${m.from}→client`, colors.reply)
       }
     }
 
@@ -319,20 +369,7 @@ export function useCanvasRenderer(
     ctx.beginPath()
     ctx.arc(cx, cy, radius + 24, 0, Math.PI * 2)
     ctx.stroke()
-
-    for (const m of messages) {
-      const pos = positions[m.from] ?? clientPos
-      const age = now - m.t
-      const t = Math.min(1, age / PULSE_MS)
-      const r = nodeR + 4 + t * 16
-      const alpha = 1 - t
-      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2)
-      ctx.stroke()
-    }
-  }, [canvasRef, state.messages, state.n, state.nodePhase, faultySet, mode])
+  }, [canvasRef, state.messages, state.n, state.nodePhase, faultySet, mode, markersRef])
 
   useEffect(() => {
     let raf = 0

@@ -1,0 +1,37 @@
+version: "3.8"
+name: pbft-redpanda
+services:
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: redpanda
+    restart: unless-stopped
+    networks: [rp]
+    ports:
+      - "9092:9092"   # external Kafka for other machines
+      - "9644:9644"   # admin API 
+      - "8082:8082"   # Pandaproxy
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data   # PERSISTENCE
+    command: >
+      redpanda start --overprovisioned --smp 1 --memory 1G --reserve-memory 0M
+      --kafka-addr PLAINTEXT://0.0.0.0:9092,INSIDE://0.0.0.0:29092
+      --advertise-kafka-addr PLAINTEXT://192.168.175.117:9092,INSIDE://redpanda:29092
+      --pandaproxy-addr 0.0.0.0:8082
+      --advertise-pandaproxy-addr 192.168.175.117:8082
+
+  console:
+    image: redpandadata/console:latest
+    container_name: redpanda-console
+    restart: unless-stopped
+    networks: [rp]
+    depends_on: [redpanda]
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BROKERS: redpanda:29092  # console talks to the internal listener
+
+networks:
+  rp: {}
+
+volumes:
+  redpanda-data: {}
