@@ -28,6 +28,8 @@ export default function App() {
   const canvasWrapRef = useRef<HTMLDivElement>(null)
   const faultySetRef = useRef<Set<number>>(new Set())
   const [canvasViewportHeight, setCanvasViewportHeight] = useState(0)
+  const [statusMessage, setStatusMessage] = useState<string>('Waiting for events...')
+
 
   useEffect(() => {
     lastEidRef.current = state.lastEid
@@ -49,30 +51,37 @@ export default function App() {
   const onEvent = useCallback((env: Envelope) => {
     const t = performance.now()
     if (env.type === 'SessionStart') {
+      setStatusMessage('Starting New Session')
       dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
       return
     }
     if (env.type === 'PrimaryElected') {
+      setStatusMessage('A Primary has been elected')
       dispatch({ kind: 'primaryElected' })
       return
     }
     if (env.type === 'ClientRequest') {
+      setStatusMessage('The client has sent a request to the primary node to execute an operation.')
       dispatch({ kind: 'client', to: 0, t, eid: env.eid })
       return
     }
     if (env.type === 'PrePrepare') {
+      setStatusMessage('The primary broadcasts a *Pre-Prepare* message to all replicas, proposing the client’s request.')
       dispatch({ kind: 'prePrepare', seq: env.seq, from: env.from, to: env.to, t, eid: env.eid })
       return
     }
     if (env.type === 'Prepare') {
+      setStatusMessage('Replicas have received the proposal and are now broadcasting *Prepare* messages to confirm it matches their log.')
       dispatch({ kind: 'prepare', from: env.from, t, eid: env.eid })
       return
     }
     if (env.type === 'Commit') {
+      setStatusMessage('Nodes have collected enough *Prepare* messages and are broadcasting *Commit* messages to finalize the decision.')
       dispatch({ kind: 'commit', from: env.from, t, eid: env.eid })
       return
     }
     if (env.type === 'Reply') {
+      setStatusMessage('Enough nodes have committed the request — a *Reply* is sent back to the client confirming execution.')
       dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
       return
     }
@@ -153,6 +162,7 @@ export default function App() {
         ;(demoRef.current as any).pauseUntil = t + ms
       }
       if (stage === 'client') {
+        setStatusMessage("Client sends request to the primary.");
         dispatch({ kind: 'client', to: 0, t, eid: bump() })
         dispatch({ kind: 'stage', label: 'Client Request', seq })
         demoRef.current.stage = 'pp'
@@ -160,6 +170,7 @@ export default function App() {
         return
       }
       if (stage === 'pp') {
+        setStatusMessage("Primary broadcasts a Pre-Prepare message with the proposed request.");
         const to = Array.from({ length: Math.max(0, n - 1) }, (_, i) => i + 1)
         dispatch({ kind: 'prePrepare', seq, from: 0, to, t, eid: bump() })
         dispatch({ kind: 'stage', label: 'PrePrepare', seq })
@@ -169,6 +180,7 @@ export default function App() {
         return
       }
       if (stage === 'prep') {
+        setStatusMessage("Replicas validate the proposal and send Prepare messages.");
         if (r < n) {
           if (!faultySetRef.current.has(r)) {
             dispatch({ kind: 'prepare', from: r, t, eid: bump() })
@@ -184,6 +196,7 @@ export default function App() {
         return
       }
       if (stage === 'commit') {
+        setStatusMessage("Enough Prepare messages collected; nodes broadcast Commit messages.");
         if (r < n) {
           if (!faultySetRef.current.has(r)) {
             dispatch({ kind: 'commit', from: r, t, eid: bump() })
@@ -192,6 +205,7 @@ export default function App() {
           demoRef.current.r = r + 1
           pause(180)
         } else {
+          setStatusMessage("Replicas send a Reply to the client confirming execution.");
           ;(demoRef.current as any).stage = 'reply'
           demoRef.current.r = 0
           pause(250)
@@ -348,6 +362,7 @@ export default function App() {
           seq={state.seq}
           commits={state.commits.size}
           quorumThreshold={quorumThreshold}
+          statusMessage={statusMessage}
         />
         <CanvasPanel
           canvasRef={canvasRef}
