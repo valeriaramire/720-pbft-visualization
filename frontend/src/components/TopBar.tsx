@@ -73,6 +73,22 @@ export default function TopBar({
     <div className="topbar">
       <div className="left">
         <button className="btn modebtn" onClick={onToggleMode}>Mode: {mode === 'demo' ? 'Demo' : 'Live'}</button>
+        <input
+          className="smallinput"
+          type="number"
+          min={1}
+          max={240}
+          value={demoEps}
+          onChange={(e) => onDemoEpsChange(parseInt(e.target.value || '60', 10) || 60)}
+        />
+        <input
+          type="range"
+          min={1}
+          max={240}
+          value={demoEps}
+          onChange={(e) => onDemoEpsChange(parseInt(e.target.value || '60', 10) || 60)}
+        />
+        <span style={{ opacity: 0.8, fontSize: 12, marginLeft: 6 }}>{demoEps} speed</span>
         {isLive && (
           <>
             <input className="urlinput" value={url} onChange={(e) => onUrlChange(e.target.value)} spellCheck={false} />
@@ -95,22 +111,6 @@ export default function TopBar({
         )}
         {!isLive && (
           <>
-            <input
-              className="smallinput"
-              type="number"
-              min={1}
-              max={240}
-              value={demoEps}
-              onChange={(e) => onDemoEpsChange(parseInt(e.target.value || '60', 10) || 60)}
-            />
-            <input
-              type="range"
-              min={1}
-              max={240}
-              value={demoEps}
-              onChange={(e) => onDemoEpsChange(parseInt(e.target.value || '60', 10) || 60)}
-            />
-            <span style={{ opacity: 0.8, fontSize: 12, marginLeft: 6 }}>{demoEps} eps</span>
             {!demoRunning ? (
               <button className="btn" onClick={onStartDemo}>Start Demo</button>
             ) : (

@@ -72,11 +72,11 @@ export default function App() {
       return
     }
     if (env.type === 'Prepare') {
-      dispatch({ kind: 'prepare', from: env.from, t, eid: env.eid })
+      dispatch({ kind: 'prepare', from: env.from, to: env.to, t, eid: env.eid })
       return
     }
     if (env.type === 'Commit') {
-      dispatch({ kind: 'commit', from: env.from, t, eid: env.eid })
+      dispatch({ kind: 'commit', from: env.from, to: env.to, t, eid: env.eid })
       return
     }
     if (env.type === 'Reply') {
@@ -166,7 +166,33 @@ export default function App() {
   const localEidRef = useRef<number>(0)
   const demoRef = useRef({ seq: 1, stage: 'client' as 'client' | 'pp' | 'prep' | 'commit', r: 0, pauseUntil: 0 })
   const manualInitializedRef = useRef<boolean>(false)
+  const demoInitializedRef = useRef<boolean>(false)
 
+  // Initialize demo session once when demo starts
+  useEffect(() => {
+    if (demoRunning && !demoInitializedRef.current) {
+      dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
+      localEidRef.current = 0
+      demoRef.current = { seq: 1, stage: 'client', r: 0, pauseUntil: 0 }
+      const parsed = new Set<number>()
+      const fi = typeof faultyInput === 'string' ? faultyInput : ''
+      fi
+        .split(',')
+        .map((s) => String(s).trim())
+        .filter(Boolean)
+        .forEach((s) => {
+          const v = parseInt(s, 10)
+          if (!isNaN(v)) parsed.add(v)
+        })
+      faultySetRef.current = parsed
+      demoInitializedRef.current = true
+    }
+    if (!demoRunning) {
+      demoInitializedRef.current = false
+    }
+  }, [demoRunning, state.n, state.f, faultyInput, dispatch])
+
+  // Demo tick loop, speed-controlled and pause-aware
   useEffect(() => {
     if (!demoRunning) {
       if (demoTimerRef.current) {
@@ -175,21 +201,6 @@ export default function App() {
       }
       return
     }
-    dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
-    localEidRef.current = 0
-    demoRef.current = { seq: 1, stage: 'client', r: 0, pauseUntil: 0 }
-    const parsed = new Set<number>()
-    const fi = typeof faultyInput === 'string' ? faultyInput : ''
-    fi
-      .split(',')
-      .map((s) => String(s).trim())
-      .filter(Boolean)
-      .forEach((s) => {
-        const v = parseInt(s, 10)
-        if (!isNaN(v)) parsed.add(v)
-      })
-    faultySetRef.current = parsed
-
     const tick = () => {
       if (paused) return
       const t = logicalTimeRef.current ?? performance.now()
@@ -273,7 +284,7 @@ export default function App() {
       if (demoTimerRef.current) clearInterval(demoTimerRef.current)
       demoTimerRef.current = null
     }
-  }, [demoRunning, demoEps, state.n, state.f, faultyInput, dispatch, paused])
+  }, [demoRunning, demoEps, state.n, paused])
 
   const initDemoManual = useCallback(() => {
     dispatch({ kind: 'sessionStart', n: state.n, f: state.f })

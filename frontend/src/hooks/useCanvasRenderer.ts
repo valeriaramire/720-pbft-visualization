@@ -49,7 +49,7 @@ export function useCanvasRenderer(
     text: '#e6ebff',
     primaryRing: '#ffd94a',
     pulse: '#7bb7ff',
-    client: '#86e0ff',
+    client: '#ffd94a',
     reply: '#ffd94a',
   }
 
@@ -181,9 +181,8 @@ export function useCanvasRenderer(
           const x = m.type === 'Prepare' ? prepX : comX
           const x2 = m.type === 'Prepare' ? comX : comFanX
           const color = m.type === 'Prepare' ? colors.prepare : colors.commit
-          for (let j = 0; j < n; j++) {
-            if (j === m.from) continue
-            if (m.type === 'Prepare' && m.from === 0) continue
+          const targets = m.to && m.to.length ? m.to : [...Array(n).keys()].filter((j) => j !== m.from)
+          for (const j of targets) {
             ctx.strokeStyle = `rgba(${m.type === 'Prepare' ? '255,158,87' : '102,208,139'},0.3)`
             ctx.lineWidth = 1
             ctx.beginPath()
@@ -308,8 +307,8 @@ export function useCanvasRenderer(
       }
       if (m.type === 'Prepare' || m.type === 'Commit') {
         const p = positions[m.from]
-        for (let j = 0; j < positions.length; j++) {
-          if (j === m.from) continue
+        const targets = m.to && m.to.length ? m.to : [...Array(positions.length).keys()].filter((j) => j !== m.from)
+        for (const j of targets) {
           const q = positions[j]
           ctx.strokeStyle = `rgba(${m.type === 'Prepare' ? '255, 158, 87' : '102, 208, 139'},0.3)`
           ctx.lineWidth = 1
