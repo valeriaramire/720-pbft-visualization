@@ -41,20 +41,11 @@ const server = http.createServer((req, res) => {
       'Access-Control-Allow-Origin': '*',
     })
 
-    let idx = 0
-    const intervalMs = 400
-    const timer = setInterval(() => {
-      if (idx >= events.length) {
-        clearInterval(timer)
-        return
-      }
-      res.write(events[idx])
-      idx += 1
-    }, intervalMs)
-
-    req.on('close', () => {
-      clearInterval(timer)
-    })
+    // Immediately stream all events in order; front-end buffers and
+    // controls playback speed on its side.
+    for (const block of events) {
+      res.write(block)
+    }
     return
   }
 
@@ -65,4 +56,3 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`SSE log server listening on http://localhost:${PORT}/sse/events`)
 })
-

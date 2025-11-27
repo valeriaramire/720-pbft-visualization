@@ -13,6 +13,7 @@ export const initialState: State = {
   connected: false,
   stageLabel: 'Idle',
   stageSeq: null,
+  eventLog: [],
 }
 
 export function reducer(state: State, action: Action): State {
@@ -20,6 +21,8 @@ export function reducer(state: State, action: Action): State {
     case 'sessionStart': {
       const phases = new Map<number, Phase>()
       for (let i = 0; i < action.n; i++) phases.set(i, 'idle')
+      const desc = `Session start · n=${action.n}, f=${action.f}`
+      const eventLog = [...state.eventLog, desc].slice(-8)
       return {
         ...state,
         n: action.n,
@@ -31,14 +34,21 @@ export function reducer(state: State, action: Action): State {
         nodePhase: phases,
         stageLabel: 'Session Start',
         stageSeq: 0,
+        eventLog,
       }
     }
     case 'primaryElected': {
-      return state
+      return {
+        ...state,
+        eventLog: [...state.eventLog, 'Primary elected'].slice(-8),
+      }
     }
     case 'prePrepare': {
       const phases = new Map(state.nodePhase)
       phases.set(action.from, 'preprepare')
+      const toStr = action.to.length ? action.to.join(',') : '-'
+      const desc = `PrePrepare · from ${action.from} → [${toStr}] · seq=${action.seq}`
+      const eventLog = [...state.eventLog, desc].slice(-8)
       return {
         ...state,
         seq: action.seq,
@@ -49,6 +59,7 @@ export function reducer(state: State, action: Action): State {
         lastEid: action.eid,
         stageLabel: 'PrePrepare',
         stageSeq: action.seq,
+        eventLog,
       }
     }
     case 'prepare': {
@@ -56,6 +67,9 @@ export function reducer(state: State, action: Action): State {
       prepares.add(action.from)
       const phases = new Map(state.nodePhase)
       phases.set(action.from, 'prepare')
+      const toStr = action.to && action.to.length ? `[${action.to.join(',')}]` : 'all replicas'
+      const desc = `Prepare · from ${action.from} → ${toStr}`
+      const eventLog = [...state.eventLog, desc].slice(-8)
       return {
         ...state,
         prepares,
@@ -64,6 +78,7 @@ export function reducer(state: State, action: Action): State {
         lastEid: action.eid,
         stageLabel: 'Prepare',
         stageSeq: state.seq,
+        eventLog,
       }
     }
     case 'commit': {
@@ -71,6 +86,9 @@ export function reducer(state: State, action: Action): State {
       commits.add(action.from)
       const phases = new Map(state.nodePhase)
       phases.set(action.from, 'commit')
+      const toStr = action.to && action.to.length ? `[${action.to.join(',')}]` : 'all replicas'
+      const desc = `Commit · from ${action.from} → ${toStr}`
+      const eventLog = [...state.eventLog, desc].slice(-8)
       return {
         ...state,
         commits,
@@ -79,27 +97,36 @@ export function reducer(state: State, action: Action): State {
         lastEid: action.eid,
         stageLabel: 'Commit',
         stageSeq: state.seq,
+        eventLog,
       }
     }
     case 'reply': {
+      const desc = `Reply · from ${action.from} → client`
+      const eventLog = [...state.eventLog, desc].slice(-8)
       return {
         ...state,
         messages: [...state.messages, { type: 'Reply', from: action.from, to: [-1], t: action.t }],
         lastEid: action.eid,
         stageLabel: 'Reply',
         stageSeq: state.seq,
+        eventLog,
       }
     }
     case 'connected': {
-      return { ...state, connected: action.value }
+      const desc = action.value ? 'Connected to stream' : 'Disconnected from stream'
+      const eventLog = [...state.eventLog, desc].slice(-8)
+      return { ...state, connected: action.value, eventLog }
     }
     case 'client': {
+      const desc = `ClientRequest · to primary (0)`
+      const eventLog = [...state.eventLog, desc].slice(-8)
       return {
         ...state,
         messages: [...state.messages, { type: 'Client', from: -1, to: [action.to], t: action.t }],
         lastEid: action.eid,
         stageLabel: 'Client Request',
         stageSeq: state.seq ? state.seq + 1 : 1,
+        eventLog,
       }
     }
     case 'stage': {

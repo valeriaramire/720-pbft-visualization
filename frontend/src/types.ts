@@ -34,6 +34,7 @@ export type State = {
   connected: boolean
   stageLabel: string
   stageSeq: number | null
+  eventLog: string[]
 }
 
 export type Action =

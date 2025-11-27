@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/state.ts","./src/types.ts","./src/components/canvaspanel.tsx","./src/components/sidebar.tsx","./src/components/topbar.tsx","./src/hooks/usecanvasrenderer.ts","./src/hooks/usendjsonsocket.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/state.ts","./src/types.ts","./src/components/canvaspanel.tsx","./src/components/sidebar.tsx","./src/components/sidebar2.tsx","./src/components/topbar.tsx","./src/hooks/usecanvasrenderer.ts","./src/hooks/usendjsonsocket.ts"],"version":"5.9.3"}
