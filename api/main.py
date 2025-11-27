@@ -497,8 +497,6 @@ async def castest(
 ):
     """
     Replacement for the old castest.php endpoint.
-
     Wandlr workload mode will POST here with client_id and next_rank.
-    We ignore those and just return the current_request text as plain text.
     """
     return PlainTextResponse(current_request)

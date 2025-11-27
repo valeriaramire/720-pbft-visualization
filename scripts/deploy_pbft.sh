@@ -5,7 +5,7 @@ set -euo pipefail
 # ------ VARS -----------
 CLIENTS=("client-1")
 REPLICAS=("replica-1" "replica-2" "replica-3" "replica-4")
-WANDLR_URL="https://jhellings.nl/castest.php"
+WANDLR_URL="http://192.168.175.117:8002/castest"
 KAFKA_PROXY="192.168.175.117:8082"
 KAFKA_TOPIC="pbft-logs"
 WANDLR_VERSION="wandlr_fixed"
