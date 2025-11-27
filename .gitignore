@@ -92,8 +92,6 @@ Thumbs.db
 .vscode-server/
 .wget-hsts
 reboot.sh
-remote-files/
-scripts/
 temp/
 wandlr-package/
 wandlr-source/

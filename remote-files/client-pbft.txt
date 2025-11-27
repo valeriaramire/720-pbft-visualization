@@ -1,0 +1,42 @@
+(.pid: 0
+ .connect_host: "0.0.0.0"
+ .pin_connect: true
+ .min_reconnect_wait: 1000
+ .max_reconnect_wait: 60000
+ .n_event_threads: 2
+ .sz_received_queue: 131072
+ .sz_participant_send_queue: 2048
+ .sz_max_packet: 1000000
+ .overload_wait: 5000000
+ .resume_timeout: 1000
+ .etf_packet_wait: 10
+ .private_key: [00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000]
+ .n_client_inflight: 1024
+ .client_min_retry_wait: 30000
+ .client_max_retry_wait: 120000
+ .replicas: {
+    (.remote_host: "0.0.0.0"
+     .remote_port: 1247
+     .public_key: [0000000000000000000000000000000000000000000000000000000000000000]
+    )
+}
+ .log_pre_connect: false
+ .log_pre_connect_fail: false
+ .log_connect: false
+ .log_connect_fail: false
+ .log_connect_validate_fail: false
+ .log_send_fail: false
+ .log_receive_fail: false
+ .log_participant_full: false
+ .log_overload_wait: false
+ .log_packet_failure: false
+ .log_message_failure: true
+ .log_message_protocol_failure: true
+ .log_message_dangling_data: true
+ .log_message_event: true
+ .log_message_invalid: true
+ .log_message_unknown_type: true
+ .log_instance_initialized: false
+ .log_instance_terminate: true
+ .log_result: true
+)
