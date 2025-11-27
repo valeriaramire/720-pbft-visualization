@@ -27,6 +27,7 @@ export default function App() {
   const [layout, setLayout] = useState<LayoutMode>('ring')
   const [liveMessage, setLiveMessage] = useState<string>('')
   const [paused, setPaused] = useState(false)
+  const [liveSendStatus, setLiveSendStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasWrapRef = useRef<HTMLDivElement>(null)
@@ -404,9 +405,22 @@ export default function App() {
     setPaused(false)
   }, [])
 
-  const handleSendLiveMessage = useCallback(() => {
-    // TODO: hook into backend send endpoint when available
-    console.log('Live message send requested:', liveMessage)
+  const handleSendLiveMessage = useCallback(async () => {
+    if (!liveMessage.trim()) return
+    setLiveSendStatus('sending')
+    try {
+      const res = await fetch('http://localhost:8002/set_request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: liveMessage }),
+      })
+      setLiveSendStatus(res.ok ? 'ok' : 'error')
+    } catch (e) {
+      console.error('Failed to send live request', e)
+      setLiveSendStatus('error')
+    }
   }, [liveMessage])
 
   const statusLabel = mode === 'demo' ? (demoRunning ? 'demo' : 'idle') : status
@@ -432,6 +446,7 @@ export default function App() {
         liveMessage={liveMessage}
         onLiveMessageChange={setLiveMessage}
         onSendLiveMessage={handleSendLiveMessage}
+        liveSendStatus={liveSendStatus}
         demoRunning={demoRunning}
         onStartDemo={handleStartDemo}
         onStopDemo={handleStopDemo}
