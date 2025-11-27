@@ -15,6 +15,7 @@ type TopBarProps = {
   liveMessage: string
   onLiveMessageChange: (value: string) => void
   onSendLiveMessage: () => void
+  liveSendStatus: 'idle' | 'sending' | 'ok' | 'error'
   demoRunning: boolean
   onStartDemo: () => void
   onStopDemo: () => void
@@ -67,6 +68,7 @@ export default function TopBar({
   onSendLiveMessage,
   paused,
   onTogglePause,
+  liveSendStatus,
 }: TopBarProps) {
   const isLive = mode === 'live'
   return (
@@ -107,6 +109,12 @@ export default function TopBar({
             <button className="btn" onClick={onSendLiveMessage} disabled={connectionStatus !== 'connected'}>
               Send
             </button>
+            <span className={`send-status send-${liveSendStatus}`}>
+              {liveSendStatus === 'idle' && 'req: idle'}
+              {liveSendStatus === 'sending' && 'req: sending'}
+              {liveSendStatus === 'ok' && 'req: ok'}
+              {liveSendStatus === 'error' && 'req: error'}
+            </span>
           </>
         )}
         {!isLive && (
