@@ -103,6 +103,8 @@ api/__pycache__/
 api/*.pyc
 frontend/dist/
 frontend/node_modules/
+**/frontend/node_modules/
+**/frontend/dist/
 
 # Ignore compiled C++ demo (if any)
 codes/wandlr
