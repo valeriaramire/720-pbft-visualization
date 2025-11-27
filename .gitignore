@@ -87,9 +87,16 @@ Thumbs.db
 .dotnet/
 .npm/
 .profile
+.lesshst
 .ssh/
 .vscode-server/
 .wget-hsts
+reboot.sh
+remote-files/
+scripts/
+temp/
+wandlr-package/
+wandlr-source/
 
 # JetBrains
 .idea/

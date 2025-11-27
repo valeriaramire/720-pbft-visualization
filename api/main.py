@@ -9,9 +9,9 @@ import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse
 from kafka import KafkaConsumer
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092").split(",")
@@ -48,12 +48,13 @@ REQUEST_FLUSH_AFTER_SEC = float(os.getenv("PBFT_REQUEST_FLUSH_SEC", "2.0"))
 MAX_REQUEST_BUFFERS = int(os.getenv("PBFT_MAX_INFLIGHT_REQUESTS", "64"))
 
 _last_eid_assigned = 0
+current_request = "Empty Request"
 
 app = FastAPI(title="PBFT Consumer API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -475,3 +476,29 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
             consumer.close()
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post("/set_request")
+async def set_request(message: str = Form("")):
+    """
+    Called by the React UI when the user hits 'Send'.
+    Stores the latest request message in memory.
+    """
+    global current_request
+    msg = message.strip()
+    if not msg:
+        msg = "Default PBFT request"
+    current_request = msg
+    return {"status": "ok"}
+
+@app.post("/castest")
+async def castest(
+    client_id: str = Form(""),
+    next_rank: str = Form(""),
+):
+    """
+    Replacement for the old castest.php endpoint.
+
+    Wandlr workload mode will POST here with client_id and next_rank.
+    We ignore those and just return the current_request text as plain text.
+    """
+    return PlainTextResponse(current_request)
