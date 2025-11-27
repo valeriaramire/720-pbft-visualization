@@ -34,7 +34,9 @@ export default function App() {
   const [canvasViewportHeight, setCanvasViewportHeight] = useState(0)
   const markerRef = useRef<MessageMarker[]>([])
   const [hoverInfo, setHoverInfo] = useState<MessageMarker | null>(null)
-  const logicalTimeRef = useRef<number | null>(null)
+  const simTimeRef = useRef<number>(0)
+  const lastRealTimeRef = useRef<number | null>(null)
+  const liveQueueRef = useRef<Envelope[]>([])
 
   useEffect(() => {
     lastEidRef.current = state.lastEid
@@ -53,37 +55,10 @@ export default function App() {
     return () => observer.disconnect()
   }, [])
 
+  // SSE handler: just buffer raw envelopes, playback is controlled by speed slider
   const onEvent = useCallback((env: Envelope) => {
-    const t = logicalTimeRef.current ?? performance.now()
-    if (env.type === 'SessionStart') {
-      dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
-      return
-    }
-    if (env.type === 'PrimaryElected') {
-      dispatch({ kind: 'primaryElected' })
-      return
-    }
-    if (env.type === 'ClientRequest') {
-      dispatch({ kind: 'client', to: 0, t, eid: env.eid })
-      return
-    }
-    if (env.type === 'PrePrepare') {
-      dispatch({ kind: 'prePrepare', seq: env.seq, from: env.from, to: env.to, t, eid: env.eid })
-      return
-    }
-    if (env.type === 'Prepare') {
-      dispatch({ kind: 'prepare', from: env.from, t, eid: env.eid })
-      return
-    }
-    if (env.type === 'Commit') {
-      dispatch({ kind: 'commit', from: env.from, t, eid: env.eid })
-      return
-    }
-    if (env.type === 'Reply') {
-      dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
-      return
-    }
-  }, [state.n, state.f])
+    liveQueueRef.current.push(env)
+  }, [])
 
   const { status, connect, disconnect } = useNDJSONSocket(url, onEvent, lastEidRef)
 
@@ -97,13 +72,22 @@ export default function App() {
   useEffect(() => {
     let raf = 0
     const loop = () => {
+      const now = performance.now()
+      if (lastRealTimeRef.current == null) {
+        lastRealTimeRef.current = now
+      }
+      const delta = now - lastRealTimeRef.current
+      lastRealTimeRef.current = now
       if (!paused) {
-        logicalTimeRef.current = performance.now()
+        simTimeRef.current += delta
       }
       raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      lastRealTimeRef.current = null
+    }
   }, [paused])
 
   useEffect(() => {
@@ -111,7 +95,7 @@ export default function App() {
     setFInput(state.f)
   }, [state.n, state.f])
 
-  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, logicalTimeRef)
+  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, simTimeRef)
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -164,9 +148,76 @@ export default function App() {
 
   const demoTimerRef = useRef<number | null>(null)
   const localEidRef = useRef<number>(0)
-  const demoRef = useRef({ seq: 1, stage: 'client' as 'client' | 'pp' | 'prep' | 'commit', r: 0, pauseUntil: 0 })
+  const demoRef = useRef({ seq: 1, stage: 'client' as 'client' | 'pp' | 'prep' | 'commit' | 'reply', r: 0 })
   const manualInitializedRef = useRef<boolean>(false)
+  const demoInitializedRef = useRef<boolean>(false)
 
+  // Initialize demo session once when demo starts
+  useEffect(() => {
+    if (demoRunning && !demoInitializedRef.current) {
+      dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
+      localEidRef.current = 0
+      demoRef.current = { seq: 1, stage: 'client', r: 0 }
+      const parsed = new Set<number>()
+      const fi = typeof faultyInput === 'string' ? faultyInput : ''
+      fi
+        .split(',')
+        .map((s) => String(s).trim())
+        .filter(Boolean)
+        .forEach((s) => {
+          const v = parseInt(s, 10)
+          if (!isNaN(v)) parsed.add(v)
+        })
+      faultySetRef.current = parsed
+      demoInitializedRef.current = true
+    }
+    if (!demoRunning) {
+      demoInitializedRef.current = false
+    }
+  }, [demoRunning, state.n, state.f, faultyInput, dispatch])
+
+  // Live mode playback: consume buffered SSE events at configurable rate
+  useEffect(() => {
+    if (mode !== 'live') return
+    const intervalMs = Math.max(1, Math.floor(1000 / Math.max(1, demoEps)))
+    const timer = window.setInterval(() => {
+      if (paused) return
+      const env = liveQueueRef.current.shift()
+      if (!env) return
+      const t = simTimeRef.current
+      if (env.type === 'SessionStart') {
+        dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
+        return
+      }
+      if (env.type === 'PrimaryElected') {
+        dispatch({ kind: 'primaryElected' })
+        return
+      }
+      if (env.type === 'ClientRequest') {
+        dispatch({ kind: 'client', to: 0, t, eid: env.eid })
+        return
+      }
+      if (env.type === 'PrePrepare') {
+        dispatch({ kind: 'prePrepare', seq: env.seq, from: env.from, to: env.to, t, eid: env.eid })
+        return
+      }
+      if (env.type === 'Prepare') {
+        dispatch({ kind: 'prepare', from: env.from, to: env.to, t, eid: env.eid })
+        return
+      }
+      if (env.type === 'Commit') {
+        dispatch({ kind: 'commit', from: env.from, to: env.to, t, eid: env.eid })
+        return
+      }
+      if (env.type === 'Reply') {
+        dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
+        return
+      }
+    }, intervalMs)
+    return () => window.clearInterval(timer)
+  }, [mode, demoEps, paused, dispatch, state.n, state.f])
+
+  // Demo tick loop, speed-controlled and pause-aware
   useEffect(() => {
     if (!demoRunning) {
       if (demoTimerRef.current) {
@@ -175,39 +226,19 @@ export default function App() {
       }
       return
     }
-    dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
-    localEidRef.current = 0
-    demoRef.current = { seq: 1, stage: 'client', r: 0, pauseUntil: 0 }
-    const parsed = new Set<number>()
-    const fi = typeof faultyInput === 'string' ? faultyInput : ''
-    fi
-      .split(',')
-      .map((s) => String(s).trim())
-      .filter(Boolean)
-      .forEach((s) => {
-        const v = parseInt(s, 10)
-        if (!isNaN(v)) parsed.add(v)
-      })
-    faultySetRef.current = parsed
-
     const tick = () => {
       if (paused) return
-      const t = logicalTimeRef.current ?? performance.now()
+      const t = simTimeRef.current
       const { seq, stage, r } = demoRef.current
       const n = state.n
       const bump = () => {
         localEidRef.current += 1
         return localEidRef.current
       }
-      if (t < (demoRef.current as any).pauseUntil) return
-      const pause = (ms: number) => {
-        ;(demoRef.current as any).pauseUntil = t + ms
-      }
       if (stage === 'client') {
         dispatch({ kind: 'client', to: 0, t, eid: bump() })
         dispatch({ kind: 'stage', label: 'Client Request', seq })
         demoRef.current.stage = 'pp'
-        pause(350)
         return
       }
       if (stage === 'pp') {
@@ -216,7 +247,6 @@ export default function App() {
         dispatch({ kind: 'stage', label: 'PrePrepare', seq })
         demoRef.current.stage = 'prep'
         demoRef.current.r = 0
-        pause(350)
         return
       }
       if (stage === 'prep') {
@@ -226,11 +256,9 @@ export default function App() {
           }
           dispatch({ kind: 'stage', label: 'Prepare', seq })
           demoRef.current.r = r + 1
-          pause(180)
         } else {
           demoRef.current.stage = 'commit'
           demoRef.current.r = 0
-          pause(250)
         }
         return
       }
@@ -241,29 +269,24 @@ export default function App() {
           }
           dispatch({ kind: 'stage', label: 'Commit', seq })
           demoRef.current.r = r + 1
-          pause(180)
         } else {
-          ;(demoRef.current as any).stage = 'reply'
+          demoRef.current.stage = 'reply'
           demoRef.current.r = 0
-          pause(250)
         }
         return
       }
-      if ((demoRef.current as any).stage === 'reply') {
+      if (stage === 'reply') {
         if (r < n) {
           if (!faultySetRef.current.has(r)) {
             dispatch({ kind: 'reply', from: r, t, eid: bump() })
           }
           dispatch({ kind: 'stage', label: 'Reply', seq })
           demoRef.current.r = r + 1
-          pause(140)
         } else {
           demoRef.current.stage = 'client'
           demoRef.current.r = 0
           demoRef.current.seq = seq + 1
-          pause(400)
         }
-        return
       }
     }
 
@@ -273,12 +296,12 @@ export default function App() {
       if (demoTimerRef.current) clearInterval(demoTimerRef.current)
       demoTimerRef.current = null
     }
-  }, [demoRunning, demoEps, state.n, state.f, faultyInput, dispatch, paused])
+  }, [demoRunning, demoEps, state.n, paused])
 
   const initDemoManual = useCallback(() => {
     dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
     localEidRef.current = 0
-    demoRef.current = { seq: 1, stage: 'client', r: 0, pauseUntil: 0 }
+    demoRef.current = { seq: 1, stage: 'client', r: 0 }
     const parsed = new Set<number>()
     const fi = typeof faultyInput === 'string' ? faultyInput : ''
     fi
@@ -294,7 +317,7 @@ export default function App() {
   }, [dispatch, state.n, state.f, faultyInput])
 
   const manualTick = useCallback(() => {
-    const t = logicalTimeRef.current ?? performance.now()
+    const t = simTimeRef.current
     const { seq, stage, r } = demoRef.current
     const n = state.n
     const bump = () => {
@@ -436,6 +459,9 @@ export default function App() {
           seq={state.seq}
           commits={state.commits.size}
           quorumThreshold={quorumThreshold}
+          eventLog={state.eventLog}
+          stageLabel={state.stageLabel}
+          stageSeq={state.stageSeq}
         />
         <CanvasPanel
           canvasRef={canvasRef}

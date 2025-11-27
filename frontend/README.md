@@ -11,7 +11,7 @@ npm run dev    # starts Vite dev server
 npm run build  # type-check + production bundle
 ```
 
-The UI defaults to `http://localhost:8080/sse/events` (SSE). Update the URL field in the top bar if your backend runs elsewhere.
+The UI defaults to `http://localhost:8002/stream` (SSE). Update the URL field in the top bar if your backend runs elsewhere.
 
 ## Architecture
 

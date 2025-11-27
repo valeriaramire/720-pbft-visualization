@@ -34,14 +34,15 @@ export type State = {
   connected: boolean
   stageLabel: string
   stageSeq: number | null
+  eventLog: string[]
 }
 
 export type Action =
   | { kind: 'sessionStart'; n: number; f: number }
   | { kind: 'primaryElected' }
   | { kind: 'prePrepare'; seq: number; from: number; to: number[]; t: number; eid: number }
-  | { kind: 'prepare'; from: number; t: number; eid: number }
-  | { kind: 'commit'; from: number; t: number; eid: number }
+  | { kind: 'prepare'; from: number; to?: number[]; t: number; eid: number }
+  | { kind: 'commit'; from: number; to?: number[]; t: number; eid: number }
   | { kind: 'connected'; value: boolean }
   | { kind: 'client'; to: number; t: number; eid: number }
   | { kind: 'stage'; label: string; seq: number | null }
