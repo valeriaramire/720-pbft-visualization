@@ -38,6 +38,7 @@ export function useCanvasRenderer(
   mode: LayoutMode = 'ring',
   markersRef?: React.MutableRefObject<MessageMarker[]>,
   timeRef?: React.MutableRefObject<number | null>,
+  flightMs: number = 1800,
 ) {
   const colors = {
     bg: '#0f1424',
@@ -131,7 +132,7 @@ export function useCanvasRenderer(
       }
 
       const now = timeRef?.current ?? performance.now()
-      const PULSE_MS = 1800
+      const PULSE_MS = flightMs
       const messages = state.messages.filter((m) => now - m.t < PULSE_MS)
       const laneY = (idx: number) => top + ((bottom - top) * (idx + 1)) / (lanes - 1)
 
@@ -156,8 +157,8 @@ export function useCanvasRenderer(
         const progress = Math.min(1, age / PULSE_MS)
         if (m.type === 'Client') {
           // path: client row at Request to primary row at PrePrepare
-          ctx.strokeStyle = 'rgba(134, 224, 255, 0.35)'
-          ctx.lineWidth = 1
+          ctx.strokeStyle = 'rgba(134, 224, 255, 0.45)'
+          ctx.lineWidth = 2
           ctx.beginPath()
           ctx.moveTo(reqX, clientY)
           ctx.lineTo(ppX, laneY(0))
@@ -167,8 +168,8 @@ export function useCanvasRenderer(
         }
         if (m.type === 'PrePrepare' && m.to && m.to.length) {
           for (const j of m.to) {
-            ctx.strokeStyle = 'rgba(126,183,255,0.35)'
-            ctx.lineWidth = 1
+            ctx.strokeStyle = 'rgba(126,183,255,0.45)'
+            ctx.lineWidth = 2
             ctx.beginPath()
             ctx.moveTo(ppX, laneY(m.from))
             ctx.lineTo(prepX, laneY(j))
@@ -183,8 +184,8 @@ export function useCanvasRenderer(
           const color = m.type === 'Prepare' ? colors.prepare : colors.commit
           const targets = m.to && m.to.length ? m.to : [...Array(n).keys()].filter((j) => j !== m.from)
           for (const j of targets) {
-            ctx.strokeStyle = `rgba(${m.type === 'Prepare' ? '255,158,87' : '102,208,139'},0.3)`
-            ctx.lineWidth = 1
+            ctx.strokeStyle = `rgba(${m.type === 'Prepare' ? '255,158,87' : '102,208,139'},0.4)`
+            ctx.lineWidth = 2
             ctx.beginPath()
             ctx.moveTo(x, laneY(m.from))
             ctx.lineTo(x2, laneY(j))
@@ -194,8 +195,8 @@ export function useCanvasRenderer(
           continue
         }
         if (m.type === 'Reply') {
-          ctx.strokeStyle = 'rgba(255,217,74,0.35)'
-          ctx.lineWidth = 1
+          ctx.strokeStyle = 'rgba(255,217,74,0.45)'
+          ctx.lineWidth = 2
           ctx.beginPath()
           ctx.moveTo(comFanX, laneY(m.from))
           ctx.lineTo(repX, clientY)
@@ -250,7 +251,7 @@ export function useCanvasRenderer(
     }
 
     const now = timeRef?.current ?? performance.now()
-    const PULSE_MS = 1800
+    const PULSE_MS = flightMs
     const messages = state.messages.filter((m) => now - m.t < PULSE_MS)
 
     const clientPos = { x: cx, y: cy - (radius + 160) }
@@ -283,8 +284,8 @@ export function useCanvasRenderer(
       const progress = Math.min(1, age / PULSE_MS)
       if (m.type === 'Client' && m.to && m.to.length) {
         const q = positions[primaryId]
-        ctx.strokeStyle = 'rgba(134, 224, 255, 0.35)'
-        ctx.lineWidth = 1
+        ctx.strokeStyle = 'rgba(134, 224, 255, 0.45)'
+        ctx.lineWidth = 2
         ctx.beginPath()
         ctx.moveTo(clientPos.x, clientPos.y)
         ctx.lineTo(q.x, q.y)
@@ -296,8 +297,8 @@ export function useCanvasRenderer(
         const p = positions[m.from]
         for (const j of m.to) {
           const q = positions[j]
-          ctx.strokeStyle = 'rgba(126, 183, 255, 0.35)'
-          ctx.lineWidth = 1
+          ctx.strokeStyle = 'rgba(126, 183, 255, 0.45)'
+          ctx.lineWidth = 2
           ctx.beginPath()
           ctx.moveTo(p.x, p.y)
           ctx.lineTo(q.x, q.y)
@@ -310,8 +311,8 @@ export function useCanvasRenderer(
         const targets = m.to && m.to.length ? m.to : [...Array(positions.length).keys()].filter((j) => j !== m.from)
         for (const j of targets) {
           const q = positions[j]
-          ctx.strokeStyle = `rgba(${m.type === 'Prepare' ? '255, 158, 87' : '102, 208, 139'},0.3)`
-          ctx.lineWidth = 1
+          ctx.strokeStyle = `rgba(${m.type === 'Prepare' ? '255, 158, 87' : '102, 208, 139'},0.4)`
+          ctx.lineWidth = 2
           ctx.beginPath()
           ctx.moveTo(p.x, p.y)
           ctx.lineTo(q.x, q.y)
@@ -321,8 +322,8 @@ export function useCanvasRenderer(
       }
       if (m.type === 'Reply') {
         const p = positions[m.from]
-        ctx.strokeStyle = 'rgba(255, 217, 74, 0.35)'
-        ctx.lineWidth = 1
+        ctx.strokeStyle = 'rgba(255, 217, 74, 0.45)'
+        ctx.lineWidth = 2
         ctx.beginPath()
         ctx.moveTo(p.x, p.y)
         ctx.lineTo(clientPos.x, clientPos.y)

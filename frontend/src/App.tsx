@@ -38,6 +38,7 @@ export default function App() {
   const simTimeRef = useRef<number>(0)
   const lastRealTimeRef = useRef<number | null>(null)
   const liveQueueRef = useRef<Envelope[]>([])
+  const animUntilRef = useRef<number | null>(null)
 
   useEffect(() => {
     lastEidRef.current = state.lastEid
@@ -79,8 +80,14 @@ export default function App() {
       }
       const delta = now - lastRealTimeRef.current
       lastRealTimeRef.current = now
-      if (!paused) {
+      const canAdvance =
+        !paused ||
+        (animUntilRef.current != null && simTimeRef.current < animUntilRef.current)
+      if (canAdvance) {
         simTimeRef.current += delta
+        if (animUntilRef.current != null && simTimeRef.current >= animUntilRef.current) {
+          animUntilRef.current = null
+        }
       }
       raf = requestAnimationFrame(loop)
     }
@@ -96,7 +103,35 @@ export default function App() {
     setFInput(state.f)
   }, [state.n, state.f])
 
-  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, simTimeRef)
+  const laneScrollMetrics = useMemo<LaneScrollMetrics>(() => {
+    if (layout !== 'lanes') return { needScroll: false, virtualHeight: undefined }
+    const lanes = state.n + 1
+    const steps = Math.max(1, lanes - 1)
+    const viewportAllowance = Math.max(0, canvasViewportHeight - (LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN))
+    const spacing = viewportAllowance && steps ? viewportAllowance / steps : viewportAllowance
+    const hasViewport = canvasViewportHeight > 0
+    const needsScrollFromHeight = hasViewport ? spacing < LANE_MIN_SPACING : false
+    const fallbackNeed = !hasViewport && state.n >= LANE_SCROLL_FALLBACK_THRESHOLD
+    const needScroll = needsScrollFromHeight || fallbackNeed
+    if (!needScroll) return { needScroll: false, virtualHeight: undefined }
+    const virtualHeight = LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN + steps * LANE_PREFERRED_SPACING
+    return { needScroll: true, virtualHeight }
+  }, [layout, state.n, canvasViewportHeight])
+
+  // Shared tick length (ms) derived from speed slider, used by demo + live.
+  // Interpret slider value as ~events per 10 seconds, so 10 -> ~1 ev/s.
+  const tickMs = useMemo(
+    () => Math.max(1, Math.floor(10000 / Math.max(1, demoEps))),
+    [demoEps],
+  )
+  // Message flight time: slightly shorter than one tick so diamonds arrive before next event.
+  const flightMs = useMemo(
+    () => Math.max(200, Math.floor(tickMs * 0.8)),
+    [tickMs],
+  )
+
+  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, simTimeRef, flightMs)
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -125,21 +160,6 @@ export default function App() {
       canvas.removeEventListener('mouseleave', handleLeave)
     }
   }, [])
-
-  const laneScrollMetrics = useMemo<LaneScrollMetrics>(() => {
-    if (layout !== 'lanes') return { needScroll: false, virtualHeight: undefined }
-    const lanes = state.n + 1
-    const steps = Math.max(1, lanes - 1)
-    const viewportAllowance = Math.max(0, canvasViewportHeight - (LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN))
-    const spacing = viewportAllowance && steps ? viewportAllowance / steps : viewportAllowance
-    const hasViewport = canvasViewportHeight > 0
-    const needsScrollFromHeight = hasViewport ? spacing < LANE_MIN_SPACING : false
-    const fallbackNeed = !hasViewport && state.n >= LANE_SCROLL_FALLBACK_THRESHOLD
-    const needScroll = needsScrollFromHeight || fallbackNeed
-    if (!needScroll) return { needScroll: false, virtualHeight: undefined }
-    const virtualHeight = LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN + steps * LANE_PREFERRED_SPACING
-    return { needScroll: true, virtualHeight }
-  }, [layout, state.n, canvasViewportHeight])
 
   const quorumThreshold = useMemo(() => 2 * state.f + 1, [state.f])
   const quorumProgress = useMemo(() => {
@@ -180,7 +200,6 @@ export default function App() {
   // Live mode playback: consume buffered SSE events at configurable rate
   useEffect(() => {
     if (mode !== 'live') return
-    const intervalMs = Math.max(1, Math.floor(1000 / Math.max(1, demoEps)))
     const timer = window.setInterval(() => {
       if (paused) return
       const env = liveQueueRef.current.shift()
@@ -214,9 +233,9 @@ export default function App() {
         dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
         return
       }
-    }, intervalMs)
+    }, tickMs)
     return () => window.clearInterval(timer)
-  }, [mode, demoEps, paused, dispatch, state.n, state.f])
+  }, [mode, tickMs, paused, dispatch, state.n, state.f])
 
   // Demo tick loop, speed-controlled and pause-aware
   useEffect(() => {
@@ -291,13 +310,12 @@ export default function App() {
       }
     }
 
-    const intervalMs = Math.max(1, Math.floor(1000 / Math.max(1, demoEps)))
-    demoTimerRef.current = window.setInterval(tick, intervalMs)
+    demoTimerRef.current = window.setInterval(tick, tickMs)
     return () => {
       if (demoTimerRef.current) clearInterval(demoTimerRef.current)
       demoTimerRef.current = null
     }
-  }, [demoRunning, demoEps, state.n, paused])
+  }, [demoRunning, tickMs, state.n, paused])
 
   const initDemoManual = useCallback(() => {
     dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
@@ -329,6 +347,7 @@ export default function App() {
       dispatch({ kind: 'client', to: 0, t, eid: bump() })
       dispatch({ kind: 'stage', label: 'Client Request', seq })
       demoRef.current.stage = 'pp'
+      if (paused) animUntilRef.current = simTimeRef.current + flightMs
       return
     }
     if (stage === 'pp') {
@@ -337,6 +356,7 @@ export default function App() {
       dispatch({ kind: 'stage', label: 'PrePrepare', seq })
       demoRef.current.stage = 'prep'
       demoRef.current.r = 0
+      if (paused) animUntilRef.current = simTimeRef.current + flightMs
       return
     }
     if (stage === 'prep') {
@@ -350,6 +370,7 @@ export default function App() {
         demoRef.current.stage = 'commit'
         demoRef.current.r = 0
       }
+      if (paused) animUntilRef.current = simTimeRef.current + flightMs
       return
     }
     if (stage === 'commit') {
@@ -364,9 +385,10 @@ export default function App() {
         demoRef.current.r = 0
         demoRef.current.seq = seq + 1
       }
+      if (paused) animUntilRef.current = simTimeRef.current + flightMs
       return
     }
-  }, [dispatch, state.n])
+  }, [dispatch, state.n, paused, flightMs])
 
   const handleConnect = useCallback(() => {
     if (demoRunning) setDemoRunning(false)
@@ -391,10 +413,15 @@ export default function App() {
   }, [dispatch, nInput, fInput])
 
   const handleNextStep = useCallback(() => {
-    if (demoRunning) setDemoRunning(false)
-    if (!manualInitializedRef.current) initDemoManual()
+    // Only allow a new manual step after the previous step's animation has finished
+    if (animUntilRef.current != null) return
+    // If we haven't initialized any demo state yet (no auto demo, no manual),
+    // run a one-time sessionStart. If auto demo already initialized, reuse that.
+    if (!manualInitializedRef.current && !demoInitializedRef.current) {
+      initDemoManual()
+    }
     manualTick()
-  }, [demoRunning, initDemoManual, manualTick])
+  }, [initDemoManual, manualTick])
 
   const handleStartDemo = useCallback(() => {
     setPaused(false)

@@ -71,6 +71,7 @@ export default function TopBar({
   liveSendStatus,
 }: TopBarProps) {
   const isLive = mode === 'live'
+  const eventsPerSec = demoEps / 10
   return (
     <div className="topbar">
       <div className="left">
@@ -90,7 +91,9 @@ export default function TopBar({
           value={demoEps}
           onChange={(e) => onDemoEpsChange(parseInt(e.target.value || '60', 10) || 60)}
         />
-        <span style={{ opacity: 0.8, fontSize: 12, marginLeft: 6 }}>{demoEps} speed</span>
+        <span style={{ opacity: 0.8, fontSize: 12, marginLeft: 6 }}>
+          {eventsPerSec.toFixed(1)} ev/s
+        </span>
         {isLive && (
           <>
             <input className="urlinput" value={url} onChange={(e) => onUrlChange(e.target.value)} spellCheck={false} />
