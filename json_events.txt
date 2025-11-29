@@ -1,0 +1,39 @@
+# sample json file
+events = [
+  {
+  clients: "client-1",
+  replicas: "replica-2",
+  timestamp: "000000000000",
+  host_ip: "50.97.90.251",
+  message: "This is for replica 3." 
+  }
+]
+
+# load json
+event_log = json.load(file)
+# parse each event for chosen item
+event = event_log[i]
+
+# create event queue
+event_queue = []
+
+# place each event in current one by one
+for event in event_log:
+  event_queue[current] = event 
+  # process from queue to front end - pop up at pause
+  if(signal.pause):
+      # event[replica].display(event[message])
+      # display the current event message
+      popup(event[message])
+
+# react popup at time of pause
+-------- ! React ! -------------------------------
+import React from 'react'
+import Popup from 'reactjs-popup'
+
+<Popup >
+  <div> {event.replica} sends {event.message} to {event.client} </div>
+</Popup>
+
+  
+
