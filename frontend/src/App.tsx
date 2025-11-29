@@ -631,6 +631,7 @@ export default function App() {
           f={state.f}
           view={state.view}
           seq={state.seq}
+          type={Envelope.type}
           overflow=auto
           prepares={state.prepares.size}
           commits={state.commits.size}
