@@ -35,6 +35,8 @@ export default function App() {
   const [layout, setLayout] = useState<LayoutMode>('ring')
   const [liveMessage, setLiveMessage] = useState<string>('')
   const [paused, setPaused] = useState(false)
+  const [setPauseMessage] = useState<string>('')
+  const [showPauseMessage] = useState(true)
   const [liveSendStatus, setLiveSendStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -542,6 +544,11 @@ export default function App() {
     setDemoRunning(false)
     setPaused(false)
   }, [])
+  const handlePauseDemo = useCallback(() => {
+    setPaused(true)
+    setPauseMessage(state.message)
+    showPauseMessage(true)
+  }, [])
 
   const handleSendLiveMessage = useCallback(async () => {
     if (!liveMessage.trim()) return
@@ -608,6 +615,7 @@ export default function App() {
         demoRunning={demoRunning}
         onStartDemo={handleStartDemo}
         onStopDemo={handleStopDemo}
+        onPauseDemo={handlePauseDemo}
         onNextStep={handleNextStep}
         onPrevStep={handlePrevStep}
         onContinue={handleStartDemo}
@@ -632,7 +640,7 @@ export default function App() {
           view={state.view}
           seq={state.seq}
           type={Envelope.type}
-          overflow=auto
+          overflow={laneScroll}
           prepares={state.prepares.size}
           commits={state.commits.size}
           quorumThreshold={quorumThreshold}
