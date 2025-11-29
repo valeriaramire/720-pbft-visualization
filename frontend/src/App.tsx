@@ -132,7 +132,7 @@ export default function App() {
   }, [state.n, state.f])
 
   const laneScrollMetrics = useMemo<LaneScrollMetrics>(() => {
-    if (layout !== 'lanes') return { needScroll: false, virtualHeight: undefined }
+    if (layout !== 'lanes') return { needScroll: false, virtualHeight: 100 }
     const lanes = state.n + 1
     const steps = Math.max(1, lanes - 1)
     const viewportAllowance = Math.max(0, canvasViewportHeight - (LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN))
@@ -141,7 +141,7 @@ export default function App() {
     const needsScrollFromHeight = hasViewport ? spacing < LANE_MIN_SPACING : false
     const fallbackNeed = !hasViewport && state.n >= LANE_SCROLL_FALLBACK_THRESHOLD
     const needScroll = needsScrollFromHeight || fallbackNeed
-    if (!needScroll) return { needScroll: false, virtualHeight: undefined }
+    if (!needScroll) return { needScroll: false, virtualHeight: 100 }
     const virtualHeight = LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN + steps * LANE_PREFERRED_SPACING
     return { needScroll: true, virtualHeight }
   }, [layout, state.n, canvasViewportHeight])
