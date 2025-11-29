@@ -1,0 +1,37 @@
+# json file for events
+events_json = [
+  {
+    message: "This is for replica 3."
+    type: "preprepare"
+    phase: "1"
+    next: "prepare"
+    replica: "replica-3"
+    client: "client-1"
+  }
+]
+
+# plotting messages from logs to logs
+event_log = []
+
+for log in event_log:
+  log[1] = events_json[1]
+  log[2] = events_json[2]
+  ...
+
+  message = "sending" log[0] "to client" log[5] ...
+  
+  print(message)
+  # message combines each log into a sentence
+
+  # forward message to front end 
+
+----------- extra ---------------------------
+# take user input directly to file
+# number of replicas = n
+# message = ""
+# client = ""
+# replica = ""
+
+
+
+
