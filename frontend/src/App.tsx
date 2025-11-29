@@ -637,6 +637,7 @@ export default function App() {
           quorumThreshold={quorumThreshold}
           eventLog={state.eventLog}
           messages={state.messages}
+          timestamp={simTime}
           stageLabel={state.stageLabel}
           stageSeq={state.stageSeq}
         />
