@@ -47,5 +47,6 @@ export type Action =
   | { kind: 'client'; to: number; t: number; eid: number }
   | { kind: 'stage'; label: string; seq: number | null }
   | { kind: 'reply'; from: number; t: number; eid: number }
+  | { kind: 'restore'; snapshot: State }
 
 export type LayoutMode = 'ring' | 'lanes'

@@ -20,6 +20,7 @@ type TopBarProps = {
   onStartDemo: () => void
   onStopDemo: () => void
   onNextStep: () => void
+  onPrevStep: () => void
   onContinue: () => void
   demoEps: number
   onDemoEpsChange: (value: number) => void
@@ -48,6 +49,7 @@ export default function TopBar({
   onStartDemo,
   onStopDemo,
   onNextStep,
+  onPrevStep,
   onContinue,
   demoEps,
   onDemoEpsChange,
@@ -129,7 +131,10 @@ export default function TopBar({
                 <button className="btn" onClick={onTogglePause}>{paused ? 'Continue' : 'Pause'}</button>
                 <button className="btn" onClick={onStopDemo}>Stop</button>
                 {paused && (
-                  <button className="btn" onClick={onNextStep}>Next Step</button>
+                  <>
+                    <button className="btn" onClick={onPrevStep}>Step Back</button>
+                    <button className="btn" onClick={onNextStep}>Next Step</button>
+                  </>
                 )}
               </>
             )}

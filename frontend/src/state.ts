@@ -49,13 +49,15 @@ export function reducer(state: State, action: Action): State {
       const toStr = action.to.length ? action.to.join(',') : '-'
       const desc = `PrePrepare · from ${action.from} → [${toStr}] · seq=${action.seq}`
       const eventLog = [...state.eventLog, desc].slice(-8)
+      const pulse = { type: 'PrePrepare', from: action.from, to: action.to, t: action.t }
       return {
         ...state,
         seq: action.seq,
         prepares: new Set(),
         commits: new Set(),
         nodePhase: phases,
-        messages: [...state.messages, { type: 'PrePrepare', from: action.from, to: action.to, t: action.t }],
+        // For clarity when stepping, only keep pulses for the most recent event.
+        messages: [pulse],
         lastEid: action.eid,
         stageLabel: 'PrePrepare',
         stageSeq: action.seq,
@@ -70,11 +72,12 @@ export function reducer(state: State, action: Action): State {
       const toStr = action.to && action.to.length ? `[${action.to.join(',')}]` : 'all replicas'
       const desc = `Prepare · from ${action.from} → ${toStr}`
       const eventLog = [...state.eventLog, desc].slice(-8)
+      const pulse = { type: 'Prepare', from: action.from, to: action.to, t: action.t }
       return {
         ...state,
         prepares,
         nodePhase: phases,
-        messages: [...state.messages, { type: 'Prepare', from: action.from, to: action.to, t: action.t }],
+        messages: [pulse],
         lastEid: action.eid,
         stageLabel: 'Prepare',
         stageSeq: state.seq,
@@ -89,11 +92,12 @@ export function reducer(state: State, action: Action): State {
       const toStr = action.to && action.to.length ? `[${action.to.join(',')}]` : 'all replicas'
       const desc = `Commit · from ${action.from} → ${toStr}`
       const eventLog = [...state.eventLog, desc].slice(-8)
+      const pulse = { type: 'Commit', from: action.from, to: action.to, t: action.t }
       return {
         ...state,
         commits,
         nodePhase: phases,
-        messages: [...state.messages, { type: 'Commit', from: action.from, to: action.to, t: action.t }],
+        messages: [pulse],
         lastEid: action.eid,
         stageLabel: 'Commit',
         stageSeq: state.seq,
@@ -103,9 +107,10 @@ export function reducer(state: State, action: Action): State {
     case 'reply': {
       const desc = `Reply · from ${action.from} → client`
       const eventLog = [...state.eventLog, desc].slice(-8)
+      const pulse = { type: 'Reply', from: action.from, to: [-1], t: action.t }
       return {
         ...state,
-        messages: [...state.messages, { type: 'Reply', from: action.from, to: [-1], t: action.t }],
+        messages: [pulse],
         lastEid: action.eid,
         stageLabel: 'Reply',
         stageSeq: state.seq,
@@ -120,9 +125,10 @@ export function reducer(state: State, action: Action): State {
     case 'client': {
       const desc = `ClientRequest · to primary (0)`
       const eventLog = [...state.eventLog, desc].slice(-8)
+      const pulse = { type: 'Client', from: -1, to: [action.to], t: action.t }
       return {
         ...state,
-        messages: [...state.messages, { type: 'Client', from: -1, to: [action.to], t: action.t }],
+        messages: [pulse],
         lastEid: action.eid,
         stageLabel: 'Client Request',
         stageSeq: state.seq ? state.seq + 1 : 1,
@@ -131,6 +137,9 @@ export function reducer(state: State, action: Action): State {
     }
     case 'stage': {
       return { ...state, stageLabel: action.label, stageSeq: action.seq }
+    }
+    case 'restore': {
+      return action.snapshot
     }
     default:
       return state
