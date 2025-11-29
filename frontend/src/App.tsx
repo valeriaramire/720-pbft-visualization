@@ -631,9 +631,12 @@ export default function App() {
           f={state.f}
           view={state.view}
           seq={state.seq}
+          overflow=auto
+          prepares={state.prepares.size}
           commits={state.commits.size}
           quorumThreshold={quorumThreshold}
           eventLog={state.eventLog}
+          messages={state.messages}
           stageLabel={state.stageLabel}
           stageSeq={state.stageSeq}
         />
