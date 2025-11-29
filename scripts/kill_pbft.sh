@@ -5,7 +5,7 @@ set -euo pipefail
 # ------ VARS -----------
 CLIENTS=("client-1")
 REPLICAS=("replica-1" "replica-2" "replica-3" "replica-4")
-WANDLR_VERSION="wandlr_fixed"
+WANDLR_VERSION="wandlr"
 # ------------------------
 
 

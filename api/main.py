@@ -7,6 +7,7 @@
 import json
 import os
 import time
+import subprocess
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, Form
@@ -48,7 +49,9 @@ REQUEST_FLUSH_AFTER_SEC = float(os.getenv("PBFT_REQUEST_FLUSH_SEC", "2.0"))
 MAX_REQUEST_BUFFERS = int(os.getenv("PBFT_MAX_INFLIGHT_REQUESTS", "64"))
 
 _last_eid_assigned = 0
+
 current_request = "Empty Request"
+current_request_id = 0
 
 app = FastAPI(title="PBFT Consumer API")
 app.add_middleware(
@@ -477,19 +480,6 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-@app.post("/set_request")
-async def set_request(message: str = Form("")):
-    """
-    Called by the React UI when the user hits 'Send'.
-    Stores the latest request message in memory.
-    """
-    global current_request
-    msg = message.strip()
-    if not msg:
-        msg = "Default PBFT request"
-    current_request = msg
-    return {"status": "ok"}
-
 @app.post("/castest")
 async def castest(
     client_id: str = Form(""),
@@ -500,3 +490,52 @@ async def castest(
     Wandlr workload mode will POST here with client_id and next_rank.
     """
     return PlainTextResponse(current_request)
+
+@app.post("/start_run")
+async def start_run(
+    message: str = Form("Default Request"),
+    rounds: int = Form(1),
+    num_replicas: int = Form(4),  
+):
+    """
+    One user decision:
+    - set the message that PBFT should use
+    - configure how many rounds (requests) to send
+    - how many replicas to use 
+    - kill any existing PBFT processes
+    - start a fresh run 
+    """
+    global current_request
+
+    # 1) Normalize and store the message
+    msg = message.strip()
+    if not msg:
+        msg = "Default Request"
+    current_request = msg
+
+    # 2) Sanitize rounds
+    try:
+        r = int(rounds)
+    except ValueError:
+        r = 1
+    if r < 1:
+        r = 1
+
+    # 3) sanitize num_replicas 
+    try:
+        nrep = int(num_replicas)
+    except ValueError:
+        nrep = 4
+    if nrep < 1:
+        nrep = 1
+
+    # 4) Kill any existing PBFT processes
+    subprocess.run(["bash", "../scripts/kill_pbft.sh"], check=False)
+
+    # 5) Start a new PBFT run with CLIENT_ROUNDS set
+    env = os.environ.copy()
+    env["CLIENT_ROUNDS"] = str(r)
+
+    subprocess.Popen(["bash", "../scripts/deploy_pbft.sh"], env=env)
+
+    return {"status": "started", "rounds": r, "message": current_request}
