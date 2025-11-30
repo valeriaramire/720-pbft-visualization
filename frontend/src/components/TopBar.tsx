@@ -15,10 +15,12 @@ type TopBarProps = {
   liveMessage: string
   onLiveMessageChange: (value: string) => void
   onSendLiveMessage: () => void
+  liveSendStatus: 'idle' | 'sending' | 'ok' | 'error'
   demoRunning: boolean
   onStartDemo: () => void
   onStopDemo: () => void
   onNextStep: () => void
+  onPrevStep: () => void
   onContinue: () => void
   demoEps: number
   onDemoEpsChange: (value: number) => void
@@ -47,6 +49,7 @@ export default function TopBar({
   onStartDemo,
   onStopDemo,
   onNextStep,
+  onPrevStep,
   onContinue,
   demoEps,
   onDemoEpsChange,
@@ -67,8 +70,10 @@ export default function TopBar({
   onSendLiveMessage,
   paused,
   onTogglePause,
+  liveSendStatus,
 }: TopBarProps) {
   const isLive = mode === 'live'
+  const eventsPerSec = demoEps / 10
   return (
     <div className="topbar">
       <div className="left">
@@ -88,7 +93,9 @@ export default function TopBar({
           value={demoEps}
           onChange={(e) => onDemoEpsChange(parseInt(e.target.value || '60', 10) || 60)}
         />
-        <span style={{ opacity: 0.8, fontSize: 12, marginLeft: 6 }}>{demoEps} speed</span>
+        <span style={{ opacity: 0.8, fontSize: 12, marginLeft: 6 }}>
+          {eventsPerSec.toFixed(1)} ev/s
+        </span>
         {isLive && (
           <>
             <input className="urlinput" value={url} onChange={(e) => onUrlChange(e.target.value)} spellCheck={false} />
@@ -107,6 +114,12 @@ export default function TopBar({
             <button className="btn" onClick={onSendLiveMessage} disabled={connectionStatus !== 'connected'}>
               Send
             </button>
+            <span className={`send-status send-${liveSendStatus}`}>
+              {liveSendStatus === 'idle' && 'req: idle'}
+              {liveSendStatus === 'sending' && 'req: sending'}
+              {liveSendStatus === 'ok' && 'req: ok'}
+              {liveSendStatus === 'error' && 'req: error'}
+            </span>
           </>
         )}
         {!isLive && (
@@ -118,7 +131,10 @@ export default function TopBar({
                 <button className="btn" onClick={onTogglePause}>{paused ? 'Continue' : 'Pause'}</button>
                 <button className="btn" onClick={onStopDemo}>Stop</button>
                 {paused && (
-                  <button className="btn" onClick={onNextStep}>Next Step</button>
+                  <>
+                    <button className="btn" onClick={onPrevStep}>Step Back</button>
+                    <button className="btn" onClick={onNextStep}>Next Step</button>
+                  </>
                 )}
               </>
             )}

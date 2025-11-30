@@ -15,6 +15,14 @@ import {
 import { initialState, reducer } from './state'
 import type { Envelope, LayoutMode } from './types'
 
+type DemoStage = 'client' | 'pp' | 'prep' | 'commit' | 'reply'
+
+type Snapshot = {
+  state: typeof initialState
+  simTime: number
+  demo: { seq: number; stage: DemoStage; r: number }
+}
+
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [mode, setMode] = useState<'demo' | 'live'>('demo')
@@ -27,6 +35,7 @@ export default function App() {
   const [layout, setLayout] = useState<LayoutMode>('ring')
   const [liveMessage, setLiveMessage] = useState<string>('')
   const [paused, setPaused] = useState(false)
+  const [liveSendStatus, setLiveSendStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasWrapRef = useRef<HTMLDivElement>(null)
@@ -37,6 +46,8 @@ export default function App() {
   const simTimeRef = useRef<number>(0)
   const lastRealTimeRef = useRef<number | null>(null)
   const liveQueueRef = useRef<Envelope[]>([])
+  const animUntilRef = useRef<number | null>(null)
+  const historyRef = useRef<Snapshot[]>([])
 
   useEffect(() => {
     lastEidRef.current = state.lastEid
@@ -54,6 +65,25 @@ export default function App() {
     observer.observe(host)
     return () => observer.disconnect()
   }, [])
+
+  const pushSnapshot = useCallback(() => {
+    const snap: Snapshot = {
+      state: {
+        ...state,
+        prepares: new Set(state.prepares),
+        commits: new Set(state.commits),
+        nodePhase: new Map(state.nodePhase),
+        messages: [...state.messages],
+        eventLog: [...state.eventLog],
+      },
+      simTime: simTimeRef.current,
+      demo: { ...demoRef.current },
+    }
+    const buf = historyRef.current
+    const next = [...buf, snap]
+    // keep last 80 steps
+    historyRef.current = next.length > 80 ? next.slice(next.length - 80) : next
+  }, [state])
 
   // SSE handler: just buffer raw envelopes, playback is controlled by speed slider
   const onEvent = useCallback((env: Envelope) => {
@@ -78,8 +108,14 @@ export default function App() {
       }
       const delta = now - lastRealTimeRef.current
       lastRealTimeRef.current = now
-      if (!paused) {
+      const canAdvance =
+        !paused ||
+        (animUntilRef.current != null && simTimeRef.current < animUntilRef.current)
+      if (canAdvance) {
         simTimeRef.current += delta
+        if (animUntilRef.current != null && simTimeRef.current >= animUntilRef.current) {
+          animUntilRef.current = null
+        }
       }
       raf = requestAnimationFrame(loop)
     }
@@ -95,7 +131,35 @@ export default function App() {
     setFInput(state.f)
   }, [state.n, state.f])
 
-  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, simTimeRef)
+  const laneScrollMetrics = useMemo<LaneScrollMetrics>(() => {
+    if (layout !== 'lanes') return { needScroll: false, virtualHeight: undefined }
+    const lanes = state.n + 1
+    const steps = Math.max(1, lanes - 1)
+    const viewportAllowance = Math.max(0, canvasViewportHeight - (LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN))
+    const spacing = viewportAllowance && steps ? viewportAllowance / steps : viewportAllowance
+    const hasViewport = canvasViewportHeight > 0
+    const needsScrollFromHeight = hasViewport ? spacing < LANE_MIN_SPACING : false
+    const fallbackNeed = !hasViewport && state.n >= LANE_SCROLL_FALLBACK_THRESHOLD
+    const needScroll = needsScrollFromHeight || fallbackNeed
+    if (!needScroll) return { needScroll: false, virtualHeight: undefined }
+    const virtualHeight = LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN + steps * LANE_PREFERRED_SPACING
+    return { needScroll: true, virtualHeight }
+  }, [layout, state.n, canvasViewportHeight])
+
+  // Shared tick length (ms) derived from speed slider, used by demo + live.
+  // Interpret slider value as ~events per 10 seconds, so 10 -> ~1 ev/s.
+  const tickMs = useMemo(
+    () => Math.max(1, Math.floor(10000 / Math.max(1, demoEps))),
+    [demoEps],
+  )
+  // Message flight time: slightly shorter than one tick so diamonds arrive before next event.
+  const flightMs = useMemo(
+    () => Math.max(200, Math.floor(tickMs * 0.8)),
+    [tickMs],
+  )
+
+  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, simTimeRef, flightMs)
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -124,21 +188,6 @@ export default function App() {
       canvas.removeEventListener('mouseleave', handleLeave)
     }
   }, [])
-
-  const laneScrollMetrics = useMemo<LaneScrollMetrics>(() => {
-    if (layout !== 'lanes') return { needScroll: false, virtualHeight: undefined }
-    const lanes = state.n + 1
-    const steps = Math.max(1, lanes - 1)
-    const viewportAllowance = Math.max(0, canvasViewportHeight - (LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN))
-    const spacing = viewportAllowance && steps ? viewportAllowance / steps : viewportAllowance
-    const hasViewport = canvasViewportHeight > 0
-    const needsScrollFromHeight = hasViewport ? spacing < LANE_MIN_SPACING : false
-    const fallbackNeed = !hasViewport && state.n >= LANE_SCROLL_FALLBACK_THRESHOLD
-    const needScroll = needsScrollFromHeight || fallbackNeed
-    if (!needScroll) return { needScroll: false, virtualHeight: undefined }
-    const virtualHeight = LANE_TOP_OFFSET + LANE_BOTTOM_MARGIN + steps * LANE_PREFERRED_SPACING
-    return { needScroll: true, virtualHeight }
-  }, [layout, state.n, canvasViewportHeight])
 
   const quorumThreshold = useMemo(() => 2 * state.f + 1, [state.f])
   const quorumProgress = useMemo(() => {
@@ -179,43 +228,49 @@ export default function App() {
   // Live mode playback: consume buffered SSE events at configurable rate
   useEffect(() => {
     if (mode !== 'live') return
-    const intervalMs = Math.max(1, Math.floor(1000 / Math.max(1, demoEps)))
     const timer = window.setInterval(() => {
       if (paused) return
       const env = liveQueueRef.current.shift()
       if (!env) return
       const t = simTimeRef.current
       if (env.type === 'SessionStart') {
+        pushSnapshot()
         dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
         return
       }
       if (env.type === 'PrimaryElected') {
+        pushSnapshot()
         dispatch({ kind: 'primaryElected' })
         return
       }
       if (env.type === 'ClientRequest') {
+        pushSnapshot()
         dispatch({ kind: 'client', to: 0, t, eid: env.eid })
         return
       }
       if (env.type === 'PrePrepare') {
+        pushSnapshot()
         dispatch({ kind: 'prePrepare', seq: env.seq, from: env.from, to: env.to, t, eid: env.eid })
         return
       }
       if (env.type === 'Prepare') {
+        pushSnapshot()
         dispatch({ kind: 'prepare', from: env.from, to: env.to, t, eid: env.eid })
         return
       }
       if (env.type === 'Commit') {
+        pushSnapshot()
         dispatch({ kind: 'commit', from: env.from, to: env.to, t, eid: env.eid })
         return
       }
       if (env.type === 'Reply') {
+        pushSnapshot()
         dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
         return
       }
-    }, intervalMs)
+    }, tickMs)
     return () => window.clearInterval(timer)
-  }, [mode, demoEps, paused, dispatch, state.n, state.f])
+  }, [mode, tickMs, paused, dispatch, state.n, state.f, pushSnapshot])
 
   // Demo tick loop, speed-controlled and pause-aware
   useEffect(() => {
@@ -236,6 +291,7 @@ export default function App() {
         return localEidRef.current
       }
       if (stage === 'client') {
+        pushSnapshot()
         dispatch({ kind: 'client', to: 0, t, eid: bump() })
         dispatch({ kind: 'stage', label: 'Client Request', seq })
         demoRef.current.stage = 'pp'
@@ -243,6 +299,7 @@ export default function App() {
       }
       if (stage === 'pp') {
         const to = Array.from({ length: Math.max(0, n - 1) }, (_, i) => i + 1)
+        pushSnapshot()
         dispatch({ kind: 'prePrepare', seq, from: 0, to, t, eid: bump() })
         dispatch({ kind: 'stage', label: 'PrePrepare', seq })
         demoRef.current.stage = 'prep'
@@ -250,12 +307,28 @@ export default function App() {
         return
       }
       if (stage === 'prep') {
-        if (r < n) {
-          if (!faultySetRef.current.has(r)) {
-            dispatch({ kind: 'prepare', from: r, t, eid: bump() })
-          }
+        // Skip primary and faulty replicas so every tick with this stage produces a visible event.
+        let nextR = r
+        while (nextR < n && (nextR === 0 || faultySetRef.current.has(nextR))) {
+          nextR += 1
+        }
+        if (nextR < n) {
+          pushSnapshot()
+          dispatch({ kind: 'prepare', from: nextR, t, eid: bump() })
           dispatch({ kind: 'stage', label: 'Prepare', seq })
-          demoRef.current.r = r + 1
+          // Decide what the *next* step should be. If there is no further
+          // replica that needs to send Prepare, advance to Commit now so
+          // there is no extra empty tick after the last message.
+          let probe = nextR + 1
+          while (probe < n && (probe === 0 || faultySetRef.current.has(probe))) {
+            probe += 1
+          }
+          if (probe >= n) {
+            demoRef.current.stage = 'commit'
+            demoRef.current.r = 0
+          } else {
+            demoRef.current.r = probe
+          }
         } else {
           demoRef.current.stage = 'commit'
           demoRef.current.r = 0
@@ -263,12 +336,25 @@ export default function App() {
         return
       }
       if (stage === 'commit') {
-        if (r < n) {
-          if (!faultySetRef.current.has(r)) {
-            dispatch({ kind: 'commit', from: r, t, eid: bump() })
-          }
+        // Skip faulty replicas; each tick should correspond to one visible Commit.
+        let nextR = r
+        while (nextR < n && faultySetRef.current.has(nextR)) {
+          nextR += 1
+        }
+        if (nextR < n) {
+          pushSnapshot()
+          dispatch({ kind: 'commit', from: nextR, t, eid: bump() })
           dispatch({ kind: 'stage', label: 'Commit', seq })
-          demoRef.current.r = r + 1
+          let probe = nextR + 1
+          while (probe < n && faultySetRef.current.has(probe)) {
+            probe += 1
+          }
+          if (probe >= n) {
+            demoRef.current.stage = 'reply'
+            demoRef.current.r = 0
+          } else {
+            demoRef.current.r = probe
+          }
         } else {
           demoRef.current.stage = 'reply'
           demoRef.current.r = 0
@@ -290,15 +376,15 @@ export default function App() {
       }
     }
 
-    const intervalMs = Math.max(1, Math.floor(1000 / Math.max(1, demoEps)))
-    demoTimerRef.current = window.setInterval(tick, intervalMs)
+    demoTimerRef.current = window.setInterval(tick, tickMs)
     return () => {
       if (demoTimerRef.current) clearInterval(demoTimerRef.current)
       demoTimerRef.current = null
     }
-  }, [demoRunning, demoEps, state.n, paused])
+  }, [demoRunning, tickMs, state.n, paused])
 
   const initDemoManual = useCallback(() => {
+    pushSnapshot()
     dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
     localEidRef.current = 0
     demoRef.current = { seq: 1, stage: 'client', r: 0 }
@@ -314,7 +400,7 @@ export default function App() {
       })
     faultySetRef.current = parsed
     manualInitializedRef.current = true
-  }, [dispatch, state.n, state.f, faultyInput])
+  }, [dispatch, state.n, state.f, faultyInput, pushSnapshot])
 
   const manualTick = useCallback(() => {
     const t = simTimeRef.current
@@ -325,26 +411,45 @@ export default function App() {
       return localEidRef.current
     }
     if (stage === 'client') {
+      pushSnapshot()
       dispatch({ kind: 'client', to: 0, t, eid: bump() })
       dispatch({ kind: 'stage', label: 'Client Request', seq })
       demoRef.current.stage = 'pp'
+      if (paused) animUntilRef.current = simTimeRef.current + flightMs
       return
     }
     if (stage === 'pp') {
       const to = Array.from({ length: Math.max(0, n - 1) }, (_, i) => i + 1)
+      pushSnapshot()
       dispatch({ kind: 'prePrepare', seq, from: 0, to, t, eid: bump() })
       dispatch({ kind: 'stage', label: 'PrePrepare', seq })
       demoRef.current.stage = 'prep'
       demoRef.current.r = 0
+      if (paused) animUntilRef.current = simTimeRef.current + flightMs
       return
     }
     if (stage === 'prep') {
-      if (r < n) {
-        if (!faultySetRef.current.has(r)) {
-          dispatch({ kind: 'prepare', from: r, t, eid: bump() })
-        }
+      // Find the next non-primary, non-faulty replica that should send Prepare.
+      let nextR = r
+      while (nextR < n && (nextR === 0 || faultySetRef.current.has(nextR))) {
+        nextR += 1
+      }
+      if (nextR < n) {
+        pushSnapshot()
+        dispatch({ kind: 'prepare', from: nextR, t, eid: bump() })
         dispatch({ kind: 'stage', label: 'Prepare', seq })
-        demoRef.current.r = r + 1
+        // After sending, decide whether there is another replica left.
+        let probe = nextR + 1
+        while (probe < n && (probe === 0 || faultySetRef.current.has(probe))) {
+          probe += 1
+        }
+        if (probe >= n) {
+          demoRef.current.stage = 'commit'
+          demoRef.current.r = 0
+        } else {
+          demoRef.current.r = probe
+        }
+        if (paused) animUntilRef.current = simTimeRef.current + flightMs
       } else {
         demoRef.current.stage = 'commit'
         demoRef.current.r = 0
@@ -352,20 +457,49 @@ export default function App() {
       return
     }
     if (stage === 'commit') {
+      // Find the next non-faulty replica that should send Commit.
+      let nextR = r
+      while (nextR < n && faultySetRef.current.has(nextR)) {
+        nextR += 1
+      }
+      if (nextR < n) {
+        pushSnapshot()
+        dispatch({ kind: 'commit', from: nextR, t, eid: bump() })
+        dispatch({ kind: 'stage', label: 'Commit', seq })
+        let probe = nextR + 1
+        while (probe < n && faultySetRef.current.has(probe)) {
+          probe += 1
+        }
+        if (probe >= n) {
+          demoRef.current.stage = 'reply'
+          demoRef.current.r = 0
+        } else {
+          demoRef.current.r = probe
+        }
+        if (paused) animUntilRef.current = simTimeRef.current + flightMs
+      } else {
+        demoRef.current.stage = 'reply'
+        demoRef.current.r = 0
+      }
+      return
+    }
+    if (stage === 'reply') {
       if (r < n) {
         if (!faultySetRef.current.has(r)) {
-          dispatch({ kind: 'commit', from: r, t, eid: bump() })
+          pushSnapshot()
+          dispatch({ kind: 'reply', from: r, t, eid: bump() })
         }
-        dispatch({ kind: 'stage', label: 'Commit', seq })
+        dispatch({ kind: 'stage', label: 'Reply', seq })
         demoRef.current.r = r + 1
       } else {
         demoRef.current.stage = 'client'
         demoRef.current.r = 0
         demoRef.current.seq = seq + 1
       }
+      if (paused) animUntilRef.current = simTimeRef.current + flightMs
       return
     }
-  }, [dispatch, state.n])
+  }, [dispatch, state.n, paused, flightMs, pushSnapshot])
 
   const handleConnect = useCallback(() => {
     if (demoRunning) setDemoRunning(false)
@@ -390,10 +524,15 @@ export default function App() {
   }, [dispatch, nInput, fInput])
 
   const handleNextStep = useCallback(() => {
-    if (demoRunning) setDemoRunning(false)
-    if (!manualInitializedRef.current) initDemoManual()
+    // Cancel any in-flight mini animation and immediately run the next step.
+    animUntilRef.current = null
+    // If we haven't initialized any demo state yet (no auto demo, no manual),
+    // run a one-time sessionStart. If auto demo already initialized, reuse that.
+    if (!manualInitializedRef.current && !demoInitializedRef.current) {
+      initDemoManual()
+    }
     manualTick()
-  }, [demoRunning, initDemoManual, manualTick])
+  }, [initDemoManual, manualTick])
 
   const handleStartDemo = useCallback(() => {
     setPaused(false)
@@ -404,9 +543,22 @@ export default function App() {
     setPaused(false)
   }, [])
 
-  const handleSendLiveMessage = useCallback(() => {
-    // TODO: hook into backend send endpoint when available
-    console.log('Live message send requested:', liveMessage)
+  const handleSendLiveMessage = useCallback(async () => {
+    if (!liveMessage.trim()) return
+    setLiveSendStatus('sending')
+    try {
+      const res = await fetch('http://localhost:8002/set_request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: liveMessage }),
+      })
+      setLiveSendStatus(res.ok ? 'ok' : 'error')
+    } catch (e) {
+      console.error('Failed to send live request', e)
+      setLiveSendStatus('error')
+    }
   }, [liveMessage])
 
   const statusLabel = mode === 'demo' ? (demoRunning ? 'demo' : 'idle') : status
@@ -415,6 +567,26 @@ export default function App() {
   const handleTogglePause = useCallback(() => {
     setPaused((p) => !p)
   }, [])
+
+  const handlePrevStep = useCallback(() => {
+    const buf = historyRef.current
+    if (!buf.length) return
+    const snap = buf[buf.length - 1]
+    historyRef.current = buf.slice(0, buf.length - 1)
+    // Cancel any current animation and restore snapshot,
+    // but retime message timestamps so they animate again from "now".
+    animUntilRef.current = null
+    const baseTime = simTimeRef.current
+    simTimeRef.current = baseTime
+    demoRef.current = { ...snap.demo }
+    const retimedState = {
+      ...snap.state,
+      messages: snap.state.messages.map((m) => ({ ...m, t: baseTime })),
+    }
+    dispatch({ kind: 'restore', snapshot: retimedState as any })
+    // Always animate the restored step once, regardless of paused flag.
+    animUntilRef.current = simTimeRef.current + flightMs
+  }, [dispatch, flightMs])
 
   return (
     <div className="app">
@@ -432,10 +604,12 @@ export default function App() {
         liveMessage={liveMessage}
         onLiveMessageChange={setLiveMessage}
         onSendLiveMessage={handleSendLiveMessage}
+        liveSendStatus={liveSendStatus}
         demoRunning={demoRunning}
         onStartDemo={handleStartDemo}
         onStopDemo={handleStopDemo}
         onNextStep={handleNextStep}
+        onPrevStep={handlePrevStep}
         onContinue={handleStartDemo}
         demoEps={demoEps}
         onDemoEpsChange={setDemoEps}

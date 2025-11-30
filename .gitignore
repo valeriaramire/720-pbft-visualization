@@ -87,9 +87,25 @@ Thumbs.db
 .dotnet/
 .npm/
 .profile
+.lesshst
 .ssh/
 .vscode-server/
 .wget-hsts
+reboot.sh
+temp/
+wandlr-package/
+wandlr-source/
+
+# SOME MORE 
+outdated/
+remote-files/configs/
+remote-files/servers.data
+remote-files/servers4.data
+init_known_hosts
+out.txt
+
+# DON't COPY PKEY
+*_id
 
 # JetBrains
 .idea/
@@ -103,6 +119,8 @@ api/__pycache__/
 api/*.pyc
 frontend/dist/
 frontend/node_modules/
+**/frontend/node_modules/
+**/frontend/dist/
 
 # Ignore compiled C++ demo (if any)
 codes/wandlr

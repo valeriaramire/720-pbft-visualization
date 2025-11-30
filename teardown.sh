@@ -10,18 +10,19 @@ set -euo pipefail
 #######################################
 
 ########## VARS ##########
-# Remote PBFT kill script on central server (mcas720)
-PBFT_KILL_SCRIPT="kill_pbft.sh" # located in mcas720 (central server to clients/replicas)
-CENTRAL_HOST="mcas720"
-DIR_PBFT_DEPLOY="newtools"
-
-# Local directories
 DIR_REDPANDA="redpanda-broker"
 DIR_CONSUMER_API="api"
-# DIR_REACT=""
+PBFT_KILL_SCRIPT="scripts/kill_pbft.sh"
 ########## END VARS ##########
 
-echo "========== 1. Shutdown PBFT (remote on $CENTRAL_HOST) =========="
+echo "========== 1. Shutdown PBFT (from webserver) =========="
+
+if [ -x "$PBFT_KILL_SCRIPT" ]; then
+    bash "$PBFT_KILL_SCRIPT"
+else
+    echo "Warning: $PBFT_KILL_SCRIPT not found or not executable; skipping PBFT kill step."
+fi
+
 
 echo "========== 2. Shutdown Consumer API =========="
 
