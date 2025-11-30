@@ -68,6 +68,11 @@ export default function App() {
     return () => observer.disconnect()
   }, [])
 
+  sendData(() => {
+    const response = await fetch("http://206.<webserver>:8002/start_run");
+    const result = await response.json();
+  }, [])
+
   const pushSnapshot = useCallback(() => {
     const snap: Snapshot = {
       state: {
