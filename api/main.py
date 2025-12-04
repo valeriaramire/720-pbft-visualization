@@ -22,6 +22,9 @@ if not KAFKA_BOOTSTRAP_SERVERS:
     KAFKA_BOOTSTRAP_SERVERS = ["localhost:9092"]
 KAFKA_TOPIC = os.getenv("PBFT_TOPIC", "pbft-logs")
 KAFKA_GROUP_ID = os.getenv("PBFT_GROUP", "pbft-visualizer")
+MAX_POLL_INTERVAL_MS = int(os.getenv("PBFT_MAX_POLL_INTERVAL_MS", "300000"))  # 5 minutes
+SESSION_TIMEOUT_MS = int(os.getenv("PBFT_SESSION_TIMEOUT_MS", "45000"))  # 45 seconds
+MAX_POLL_RECORDS = int(os.getenv("PBFT_MAX_POLL_RECORDS", "136"))
 
 REPLICA_COUNT = int(os.getenv("PBFT_REPLICAS", "4"))
 FAULT_TOLERANCE = int(os.getenv("PBFT_F", "1"))
@@ -73,12 +76,16 @@ def make_consumer(offset: str = "latest", group_id: str | None = None) -> KafkaC
 
     if group_id:
         group_id = group_id.strip() or None
+    print(f">> Connecting to Kafka: topic={KAFKA_TOPIC}, group={group_id or KAFKA_GROUP_ID}")
     consumer = KafkaConsumer(
         KAFKA_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         group_id=group_id or KAFKA_GROUP_ID,
         auto_offset_reset=offset,
         enable_auto_commit=True,
+        max_poll_interval_ms=MAX_POLL_INTERVAL_MS,
+        session_timeout_ms=SESSION_TIMEOUT_MS,
+        max_poll_records=MAX_POLL_RECORDS,
         value_deserializer=lambda v: v.decode("utf-8", errors="ignore"),
     )
     return consumer
@@ -412,7 +419,7 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
             build_control_event("PrimaryElected", {"primary": 0}),
         ]
 
-    def flush_buffer(key: str, buf: RequestBuffer, remember: bool = True):
+    def flush_buffer(key: str, buf: RequestBuffer, remember: bool = True, reason: str = "manual"):
         ordered = buf.drain_sorted()
         if not ordered:
             return
@@ -430,7 +437,7 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                 eid_values.append(eid_val)
         eid_span = (min(eid_values), max(eid_values)) if eid_values else (None, None)
         print(
-            f"[FLUSH] key={key} total={len(ordered)} phases={phase_detail} "
+            f"[FLUSH] reason={reason} key={key} total={len(ordered)} phases={phase_detail} "
             f"seqs={seqs} senders={senders} eid_span={eid_span}"
         )
         for line in lines:
@@ -536,7 +543,7 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
 
                         if should_flush:
                             if active_final_key and active_final_key in buffers:
-                                yield from flush_buffer(active_final_key, buffers[active_final_key])
+                                yield from flush_buffer(active_final_key, buffers[active_final_key], reason="boundary")
                             active_final_key = None
                             order_to_rank.clear()
                             rank_to_order.clear()
@@ -579,7 +586,7 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
 
                         is_final_key = req_key.startswith("order:") if isinstance(req_key, str) else False
                         if is_final_key and active_final_key and active_final_key != req_key and active_final_key in buffers:
-                            yield from flush_buffer(active_final_key, buffers[active_final_key])
+                            yield from flush_buffer(active_final_key, buffers[active_final_key], reason="final_key_switch")
                         if is_final_key:
                             active_final_key = req_key
 
@@ -591,7 +598,7 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                         # limit # of active buffers
                         if req_key not in buffers and len(buffers) >= MAX_REQUEST_BUFFERS:
                             oldest_key, oldest_buf = min(buffers.items(), key=lambda kv: kv[1].first_seen)
-                            yield from flush_buffer(oldest_key, oldest_buf)
+                            yield from flush_buffer(oldest_key, oldest_buf, reason="evict_oldest")
 
                         buf = buffers.setdefault(
                             req_key,
@@ -613,9 +620,7 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                     if buf.should_flush(now_ts):
                         if active_final_key == key:
                             active_final_key = None
-                        yield from flush_buffer(key, buf)
-
-                consumer.commit()
+                        yield from flush_buffer(key, buf, reason="idle_timeout")
 
         finally:
             # flush all before close
