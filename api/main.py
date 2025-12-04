@@ -22,6 +22,9 @@ if not KAFKA_BOOTSTRAP_SERVERS:
     KAFKA_BOOTSTRAP_SERVERS = ["localhost:9092"]
 KAFKA_TOPIC = os.getenv("PBFT_TOPIC", "pbft-logs")
 KAFKA_GROUP_ID = os.getenv("PBFT_GROUP", "pbft-visualizer")
+MAX_POLL_INTERVAL_MS = int(os.getenv("PBFT_MAX_POLL_INTERVAL_MS", "300000"))  # 5 minutes
+SESSION_TIMEOUT_MS = int(os.getenv("PBFT_SESSION_TIMEOUT_MS", "45000"))  # 45 seconds
+MAX_POLL_RECORDS = int(os.getenv("PBFT_MAX_POLL_RECORDS", "136"))
 
 REPLICA_COUNT = int(os.getenv("PBFT_REPLICAS", "4"))
 FAULT_TOLERANCE = int(os.getenv("PBFT_F", "1"))
@@ -47,6 +50,8 @@ PHASE_ORDER = {
 
 REQUEST_FLUSH_AFTER_SEC = float(os.getenv("PBFT_REQUEST_FLUSH_SEC", "12.0"))
 MAX_REQUEST_BUFFERS = int(os.getenv("PBFT_MAX_INFLIGHT_REQUESTS", "64"))
+# Default ON; set PBFT_DEBUG_BUFFERS=0 to disable
+DEBUG_BUFFERS = os.getenv("PBFT_DEBUG_BUFFERS", "1") != "0"
 
 _last_eid_assigned = 0
 
@@ -71,12 +76,16 @@ def make_consumer(offset: str = "latest", group_id: str | None = None) -> KafkaC
 
     if group_id:
         group_id = group_id.strip() or None
+    print(f">> Connecting to Kafka: topic={KAFKA_TOPIC}, group={group_id or KAFKA_GROUP_ID}")
     consumer = KafkaConsumer(
         KAFKA_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
         group_id=group_id or KAFKA_GROUP_ID,
         auto_offset_reset=offset,
         enable_auto_commit=True,
+        max_poll_interval_ms=MAX_POLL_INTERVAL_MS,
+        session_timeout_ms=SESSION_TIMEOUT_MS,
+        max_poll_records=MAX_POLL_RECORDS,
         value_deserializer=lambda v: v.decode("utf-8", errors="ignore"),
     )
     return consumer
@@ -136,8 +145,12 @@ def extract_request_counter(data: Dict[str, Any]) -> Optional[int]:
     if not isinstance(data, dict):
         return None
 
+    # We only care about three places:
+    # 1) message.rank
+    # 2) message.client_request.message.rank
+    # 3) payload.rank
     def try_rank(obj: Dict[str, Any] | None) -> Optional[int]:
-        return _first_int(obj, "rank", "counter", "req", "req_id")
+        return _first_int(obj, "rank")
 
     message = data.get("message") if isinstance(data.get("message"), dict) else None
     if message:
@@ -148,10 +161,6 @@ def extract_request_counter(data: Dict[str, Any]) -> Optional[int]:
         if client_req:
             inner_msg = client_req.get("message") if isinstance(client_req.get("message"), dict) else None
             r = try_rank(inner_msg)
-            if r is not None:
-                return r
-            payload = inner_msg.get("payload") if isinstance(inner_msg, dict) else None
-            r = try_rank(payload if isinstance(payload, dict) else None)
             if r is not None:
                 return r
     payload = data.get("payload")
@@ -208,32 +217,44 @@ class RequestBuffer:
         self.events: List[Dict[str, Any]] = []
         self.meta: List[Tuple[int, Optional[int]]] = []
         self.first_seen = time.time()
+        self.last_seen = self.first_seen
 
-    def add(self, envelope: Dict[str, Any], phase_rank: int, message_index: Optional[int]) -> None:
+    def add(self, envelope: Dict[str, Any], phase_rank: int, message_index: Optional[int]):
         self.events.append(envelope)
-        self.meta.append((phase_rank, message_index if isinstance(message_index, int) else None))
+        self.meta.append((phase_rank, message_index))
+        self.last_seen = time.time()
 
     def should_flush(self, now: float) -> bool:
-        return (now - self.first_seen) >= self.stale_after
+        return now - self.first_seen >= self.stale_after
 
     def drain_sorted(self) -> List[Dict[str, Any]]:
+        # sort by (phase rank, message index, sender id, first to-id, timestamp)
         combined = list(zip(self.meta, self.events))
-        combined.sort(
-            key=lambda item: (
-                item[0][0],
-                item[0][1] if item[0][1] is not None else 1_000_000,
-                item[1].get("from", -1),
-                item[1].get("ts", 0),
-            )
-        )
+        combined.sort(key=lambda item: (
+            item[0][0], # phase rank
+            item[0][1] if item[0][1] is not None else 1_000_000, # message index
+            item[1].get("from", -1), # sender
+            min(item[1].get("to") or [-1]), # first to id for stable ordering per sender
+            item[1].get("ts", 0), # timestamp
+        ))
         ordered = [env for _, env in combined]
         self.events.clear()
         self.meta.clear()
         self.first_seen = time.time()
+        self.last_seen = self.first_seen
         return ordered
 
-    def empty(self) -> bool:
-        return not self.events
+
+def describe_buffers(buffers: Dict[str, RequestBuffer], active_key: Optional[str]) -> str:
+    """
+    Build a short debug string about current buffers.
+    Example: active=order:1-rank:1 keys=[order:1-rank:1(5), pending-rank:2(1)]
+    """
+    parts: List[str] = []
+    for key, buf in buffers.items():
+        parts.append(f"{key}({len(buf.events)})")
+    joined = ", ".join(parts)
+    return f"active={active_key} keys=[{joined}]"
 
 
 def filter_pbft_event(raw_value: str) -> Dict[str, Any] | None:
@@ -265,8 +286,6 @@ def filter_pbft_event(raw_value: str) -> Dict[str, Any] | None:
     rank = extract_request_counter(data)
     message_index = extract_message_index(data)
     seq_val = extract_order(data)
-    if not isinstance(seq_val, int):
-        seq_val = data.get("seq") or data.get("order")
     receiver_id = parse_receiver_id(obj)
 
     cleaned = {
@@ -288,10 +307,13 @@ def filter_pbft_event(raw_value: str) -> Dict[str, Any] | None:
 
 
 def extract_order(data: Dict[str, Any]) -> Optional[int]:
-    order = data.get("order")
-    if isinstance(order, int):
-        return order
+    # Order appears in two places we care about:
+    # 1) log-data.message.order (e.g., inform)
+    # 2) log-data.message.proposal.message.order (preprepare/prepare/commit)
     message = data.get("message") or {}
+    direct_msg_order = message.get("order")
+    if isinstance(direct_msg_order, int):
+        return direct_msg_order
     proposal = message.get("proposal") or {}
     proposal_msg = proposal.get("message") or {}
     val = proposal_msg.get("order")
@@ -301,10 +323,13 @@ def extract_order(data: Dict[str, Any]) -> Optional[int]:
 
 
 def extract_view(data: Dict[str, Any]) -> Optional[int]:
-    view = data.get("view")
-    if isinstance(view, int):
-        return view
+    # View appears in two places we care about:
+    # 1) log-data.message.current_view (e.g., inform)
+    # 2) log-data.message.proposal.message.view (preprepare/prepare/commit)
     message = data.get("message") or {}
+    direct_view = message.get("current_view")
+    if isinstance(direct_view, int):
+        return direct_view
     proposal = message.get("proposal") or {}
     proposal_msg = proposal.get("message") or {}
     val = proposal_msg.get("view")
@@ -326,18 +351,13 @@ def build_envelope(cleaned: Dict[str, Any]) -> Dict[str, Any] | None:
     receiver_id = cleaned.get("receiver_id")
     if isinstance(receiver_id, int):
         to_field = [receiver_id]
-    elif event_type == "PrePrepare":
-        to_field = [i for i in range(current_replica_count) if i != from_id and i >= 0]
 
+    # seq matches order if present, otherwise falls back to rank
     seq_val = extract_order(cleaned.get("raw", {}))
     if not isinstance(seq_val, int):
         rank_val = cleaned.get("rank")
         if isinstance(rank_val, int):
             seq_val = rank_val
-    if not isinstance(seq_val, int):
-        seq_val = cleaned.get("instance")
-    if not isinstance(seq_val, int):
-        seq_val = 0
 
     envelope = {
         "schema_ver": SCHEMA_VERSION,
@@ -399,7 +419,7 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
             build_control_event("PrimaryElected", {"primary": 0}),
         ]
 
-    def flush_buffer(key: str, buf: RequestBuffer, remember: bool = True):
+    def flush_buffer(key: str, buf: RequestBuffer, remember: bool = True, reason: str = "manual"):
         ordered = buf.drain_sorted()
         if not ordered:
             return
@@ -417,7 +437,7 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                 eid_values.append(eid_val)
         eid_span = (min(eid_values), max(eid_values)) if eid_values else (None, None)
         print(
-            f"[FLUSH] key={key} total={len(ordered)} phases={phase_detail} "
+            f"[FLUSH] reason={reason} key={key} total={len(ordered)} phases={phase_detail} "
             f"seqs={seqs} senders={senders} eid_span={eid_span}"
         )
         for line in lines:
@@ -430,10 +450,14 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
     def event_generator():
         try:
             seen_assignment = False
-            window_id = 0
+            # For Prepare & Commit messages, we only see order. So we need to map order <-> rank.
             order_to_rank: Dict[int, int] = {}
+            # For Request messages, we only see rank. So we need to map rank <-> order.
             rank_to_order: Dict[int, int] = {}
             active_final_key: Optional[str] = None
+            last_order_seen: Optional[int] = None
+            last_rank_seen: Optional[int] = None
+            # To avoid resending control events unnecessarily.
             last_sent_epoch = -1
 
             # Send initial control and latest round history
@@ -446,58 +470,85 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                     yield line
 
             while True:
+                # 1. Send control events if new epoch started
                 if control_epoch >= 0 and control_epoch != last_sent_epoch:
                     for ctrl in control_events():
                         yield stamp_and_format_event(ctrl)
                     last_sent_epoch = control_epoch
+                    # Reset state for a new session/run
+                    for k, buf in list(buffers.items()):
+                        yield from flush_buffer(k, buf, remember=False)
+                    active_final_key = None
+                    order_to_rank.clear()
+                    rank_to_order.clear()
+                    last_order_seen = None
+                    last_rank_seen = None
 
+                # 2. Pull messages from Kafka
                 polled = consumer.poll(timeout_ms=500)
+                
+                # Only log once we actually have a partition, to avoid the misleading empty set
                 if not seen_assignment:
                     assignment = consumer.assignment()
-                    # Only log once we actually have a partition, to avoid the misleading empty set
                     if assignment:
                         print(">> Consumer assignment:", assignment)
                         seen_assignment = True
-                now = time.time()
 
+                # TODO: check out the logic here
                 def merge_buffer(src_key: str, dst_key: str) -> None:
                     if src_key == dst_key:
                         return
+                    # (1. pull src buffer
                     src_buf = buffers.pop(src_key, None)
                     if not src_buf:
                         return
                     dst_buf = buffers.setdefault(dst_key, src_buf)
+                    # (2. merge src into dst
                     if dst_buf is not src_buf:
                         dst_buf.events.extend(src_buf.events)
                         dst_buf.meta.extend(src_buf.meta)
                         dst_buf.first_seen = min(dst_buf.first_seen, src_buf.first_seen)
+                        dst_buf.last_seen = max(dst_buf.last_seen, src_buf.last_seen)
 
-                # flush stale buffers
-                if all(len(v) == 0 for v in polled.values()):
-                    stale_keys = [k for k, b in buffers.items() if b.should_flush(now)]
-                    for k in stale_keys:
-                        yield from flush_buffer(k, buffers[k])
-                    continue
-
+                # 3. Process each message
                 for records in polled.values():
                     for msg in records:
                         raw_value = msg.value
-                        cleaned = filter_pbft_event(raw_value)
+                        cleaned = filter_pbft_event(raw_value) # filter & clean
                         if not cleaned:
                             continue
 
-                        envelope = build_envelope(cleaned)
+                        envelope = build_envelope(cleaned) # build envelope
                         if not envelope:
                             continue
 
-                        event_type = envelope.get("type")
-                        phase_rank = PHASE_ORDER.get(event_type)
+                        event_type = envelope.get("type") #'ClientRequest' / 'PrePrepare' / 'Prepare' / 'Commit' / 'Reply'
+                        phase_rank = PHASE_ORDER.get(event_type) # 0..4
 
-                        seq_val = extract_order(cleaned.get("raw", {}))
-                        if not isinstance(seq_val, int):
-                            seq_val = envelope.get("seq")
+                        order_val = cleaned.get("seq")
                         rank_val = cleaned.get("rank")
                         req_key: Optional[str] = None
+
+                        # Detect round change: any change in rank/order closes previous final buffer.
+                        order_changed = isinstance(order_val, int) and last_order_seen is not None and order_val != last_order_seen
+                        rank_changed = isinstance(rank_val, int) and last_rank_seen is not None and rank_val != last_rank_seen
+
+                        should_flush = False
+                        if event_type == "ClientRequest" and rank_changed:
+                            should_flush = True
+                        elif event_type in ("PrePrepare", "Reply") and (order_changed or rank_changed):
+                            should_flush = True
+                        elif event_type in ("Prepare", "Commit") and order_changed:
+                            should_flush = True
+
+                        if should_flush:
+                            if active_final_key and active_final_key in buffers:
+                                yield from flush_buffer(active_final_key, buffers[active_final_key], reason="boundary")
+                            active_final_key = None
+                            order_to_rank.clear()
+                            rank_to_order.clear()
+                            last_order_seen = None
+                            last_rank_seen = None
 
                         if event_type == "ClientRequest":
                             if isinstance(rank_val, int):
@@ -508,51 +559,34 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                                 else:
                                     req_key = f"pending-rank:{rank_val}"
 
-                        elif event_type == "PrePrepare":
-                            if isinstance(seq_val, int) and isinstance(rank_val, int):
-                                order_to_rank[seq_val] = rank_val
-                                rank_to_order[rank_val] = seq_val
-                                req_key = make_order_rank_key(seq_val, rank_val)
-                                merge_buffer(f"pending-rank:{rank_val}", req_key)
-                                merge_buffer(f"pending-order:{seq_val}", req_key)
-
                         elif event_type in ("Prepare", "Commit"):
-                            if isinstance(seq_val, int):
-                                if seq_val in order_to_rank:
-                                    r = order_to_rank[seq_val]
-                                    req_key = make_order_rank_key(seq_val, r)
+                            if isinstance(order_val, int):
+                                if order_val in order_to_rank:
+                                    r = order_to_rank[order_val]
+                                    req_key = make_order_rank_key(order_val, r)
+                                    merge_buffer(f"pending-order:{order_val}", req_key)
                                 else:
-                                    req_key = f"pending-order:{seq_val}"
+                                    req_key = f"pending-order:{order_val}"
 
-                        elif event_type == "Reply":
-                            if isinstance(seq_val, int) and seq_val in order_to_rank:
-                                r = order_to_rank[seq_val]
-                                req_key = make_order_rank_key(seq_val, r)
-                            elif isinstance(rank_val, int) and rank_val in rank_to_order:
-                                o = rank_to_order[rank_val]
-                                req_key = make_order_rank_key(o, rank_val)
-                            elif isinstance(seq_val, int) and isinstance(rank_val, int):
-                                order_to_rank[seq_val] = rank_val
-                                rank_to_order[rank_val] = seq_val
-                                req_key = make_order_rank_key(seq_val, rank_val)
-                            elif active_final_key:
-                                req_key = active_final_key
-                            else:
-                                req_key = f"window:{window_id}"
+                        elif event_type in ("PrePrepare", "Reply"):
+                            if isinstance(order_val, int) and isinstance(rank_val, int):
+                                order_to_rank[order_val] = rank_val
+                                rank_to_order[rank_val] = order_val
 
-                            if isinstance(seq_val, int):
-                                merge_buffer(f"pending-order:{seq_val}", req_key)
-                            if isinstance(rank_val, int):
+                                req_key = make_order_rank_key(order_val, rank_val)
+
                                 merge_buffer(f"pending-rank:{rank_val}", req_key)
+                                merge_buffer(f"pending-order:{order_val}", req_key)
+                            else:
+                                req_key = active_final_key
 
                         if not req_key:
-                            if event_type == "ClientRequest":
-                                window_id += 1
-                            req_key = f"window:{window_id}"
+                            print(f"[WARN] Unroutable event, no order/rank: {event_type} raw={cleaned.get('raw')}")
+                            continue
 
                         is_final_key = req_key.startswith("order:") if isinstance(req_key, str) else False
                         if is_final_key and active_final_key and active_final_key != req_key and active_final_key in buffers:
-                            yield from flush_buffer(active_final_key, buffers[active_final_key])
+                            yield from flush_buffer(active_final_key, buffers[active_final_key], reason="final_key_switch")
                         if is_final_key:
                             active_final_key = req_key
 
@@ -564,23 +598,29 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                         # limit # of active buffers
                         if req_key not in buffers and len(buffers) >= MAX_REQUEST_BUFFERS:
                             oldest_key, oldest_buf = min(buffers.items(), key=lambda kv: kv[1].first_seen)
-                            yield from flush_buffer(oldest_key, oldest_buf)
+                            yield from flush_buffer(oldest_key, oldest_buf, reason="evict_oldest")
 
                         buf = buffers.setdefault(
                             req_key,
                             RequestBuffer(REQUEST_FLUSH_AFTER_SEC)
                         )
                         buf.add(envelope, phase_rank, cleaned.get("message_index"))
+                        if DEBUG_BUFFERS:
+                            print("[BUFFERS]", describe_buffers(buffers, active_final_key))
 
-                        if buf.should_flush(now):
-                            yield from flush_buffer(req_key, buf)
+                        # Track last seen order/rank for round boundary detection
+                        if isinstance(order_val, int):
+                            last_order_seen = order_val
+                        if isinstance(rank_val, int):
+                            last_rank_seen = rank_val
 
-                        # flush other stale buffers
-                        stale_keys = [k for k, b in buffers.items() if b.should_flush(now) and k != req_key]
-                        for k in stale_keys:
-                            yield from flush_buffer(k, buffers[k])
-
-                consumer.commit()
+                # Flush stale buffers to ensure single-round outputs still emit
+                now_ts = time.time()
+                for key, buf in list(buffers.items()):
+                    if buf.should_flush(now_ts):
+                        if active_final_key == key:
+                            active_final_key = None
+                        yield from flush_buffer(key, buf, reason="idle_timeout")
 
         finally:
             # flush all before close
