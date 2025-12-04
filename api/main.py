@@ -136,8 +136,12 @@ def extract_request_counter(data: Dict[str, Any]) -> Optional[int]:
     if not isinstance(data, dict):
         return None
 
+    # We only care about three places:
+    # 1) message.rank
+    # 2) message.client_request.message.rank
+    # 3) payload.rank
     def try_rank(obj: Dict[str, Any] | None) -> Optional[int]:
-        return _first_int(obj, "rank", "counter", "req", "req_id")
+        return _first_int(obj, "rank")
 
     message = data.get("message") if isinstance(data.get("message"), dict) else None
     if message:
@@ -148,10 +152,6 @@ def extract_request_counter(data: Dict[str, Any]) -> Optional[int]:
         if client_req:
             inner_msg = client_req.get("message") if isinstance(client_req.get("message"), dict) else None
             r = try_rank(inner_msg)
-            if r is not None:
-                return r
-            payload = inner_msg.get("payload") if isinstance(inner_msg, dict) else None
-            r = try_rank(payload if isinstance(payload, dict) else None)
             if r is not None:
                 return r
     payload = data.get("payload")
@@ -209,31 +209,27 @@ class RequestBuffer:
         self.meta: List[Tuple[int, Optional[int]]] = []
         self.first_seen = time.time()
 
-    def add(self, envelope: Dict[str, Any], phase_rank: int, message_index: Optional[int]) -> None:
+    def add(self, envelope: Dict[str, Any], phase_rank: int, message_index: Optional[int]):
         self.events.append(envelope)
-        self.meta.append((phase_rank, message_index if isinstance(message_index, int) else None))
+        self.meta.append((phase_rank, message_index))
 
     def should_flush(self, now: float) -> bool:
-        return (now - self.first_seen) >= self.stale_after
+        return now - self.first_seen >= self.stale_after
 
     def drain_sorted(self) -> List[Dict[str, Any]]:
+        # sort by (phase rank, message index, sender id, timestamp)
         combined = list(zip(self.meta, self.events))
-        combined.sort(
-            key=lambda item: (
-                item[0][0],
-                item[0][1] if item[0][1] is not None else 1_000_000,
-                item[1].get("from", -1),
-                item[1].get("ts", 0),
-            )
-        )
+        combined.sort(key=lambda item: (
+            item[0][0], # phase rank
+            item[0][1] if item[0][1] is not None else 1_000_000, # message index
+            item[1].get("from", -1), # senders
+            item[1].get("ts", 0), # timestamp
+        ))
         ordered = [env for _, env in combined]
         self.events.clear()
         self.meta.clear()
         self.first_seen = time.time()
         return ordered
-
-    def empty(self) -> bool:
-        return not self.events
 
 
 def filter_pbft_event(raw_value: str) -> Dict[str, Any] | None:
@@ -265,8 +261,6 @@ def filter_pbft_event(raw_value: str) -> Dict[str, Any] | None:
     rank = extract_request_counter(data)
     message_index = extract_message_index(data)
     seq_val = extract_order(data)
-    if not isinstance(seq_val, int):
-        seq_val = data.get("seq") or data.get("order")
     receiver_id = parse_receiver_id(obj)
 
     cleaned = {
@@ -288,10 +282,13 @@ def filter_pbft_event(raw_value: str) -> Dict[str, Any] | None:
 
 
 def extract_order(data: Dict[str, Any]) -> Optional[int]:
-    order = data.get("order")
-    if isinstance(order, int):
-        return order
+    # Order appears in two places we care about:
+    # 1) log-data.message.order (e.g., inform)
+    # 2) log-data.message.proposal.message.order (preprepare/prepare/commit)
     message = data.get("message") or {}
+    direct_msg_order = message.get("order")
+    if isinstance(direct_msg_order, int):
+        return direct_msg_order
     proposal = message.get("proposal") or {}
     proposal_msg = proposal.get("message") or {}
     val = proposal_msg.get("order")
@@ -301,10 +298,13 @@ def extract_order(data: Dict[str, Any]) -> Optional[int]:
 
 
 def extract_view(data: Dict[str, Any]) -> Optional[int]:
-    view = data.get("view")
-    if isinstance(view, int):
-        return view
+    # View appears in two places we care about:
+    # 1) log-data.message.current_view (e.g., inform)
+    # 2) log-data.message.proposal.message.view (preprepare/prepare/commit)
     message = data.get("message") or {}
+    direct_view = message.get("current_view")
+    if isinstance(direct_view, int):
+        return direct_view
     proposal = message.get("proposal") or {}
     proposal_msg = proposal.get("message") or {}
     val = proposal_msg.get("view")
@@ -326,18 +326,13 @@ def build_envelope(cleaned: Dict[str, Any]) -> Dict[str, Any] | None:
     receiver_id = cleaned.get("receiver_id")
     if isinstance(receiver_id, int):
         to_field = [receiver_id]
-    elif event_type == "PrePrepare":
-        to_field = [i for i in range(current_replica_count) if i != from_id and i >= 0]
 
+    # seq matches order if present, otherwise falls back to rank
     seq_val = extract_order(cleaned.get("raw", {}))
     if not isinstance(seq_val, int):
         rank_val = cleaned.get("rank")
         if isinstance(rank_val, int):
             seq_val = rank_val
-    if not isinstance(seq_val, int):
-        seq_val = cleaned.get("instance")
-    if not isinstance(seq_val, int):
-        seq_val = 0
 
     envelope = {
         "schema_ver": SCHEMA_VERSION,
@@ -431,9 +426,12 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
         try:
             seen_assignment = False
             window_id = 0
+            # For Prepare & Commit messages, we only see order. So we need to map order <-> rank.
             order_to_rank: Dict[int, int] = {}
+            # For Request messages, we only see rank. So we need to map rank <-> order.
             rank_to_order: Dict[int, int] = {}
             active_final_key: Optional[str] = None
+            # To avoid resending control events unnecessarily.
             last_sent_epoch = -1
 
             # Send initial control and latest round history
@@ -446,20 +444,23 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                     yield line
 
             while True:
+                # 1. Send control events if new epoch started
                 if control_epoch >= 0 and control_epoch != last_sent_epoch:
                     for ctrl in control_events():
                         yield stamp_and_format_event(ctrl)
                     last_sent_epoch = control_epoch
 
+                # 2. Pull messages from Kafka
                 polled = consumer.poll(timeout_ms=500)
+                
+                # Only log once we actually have a partition, to avoid the misleading empty set
                 if not seen_assignment:
                     assignment = consumer.assignment()
-                    # Only log once we actually have a partition, to avoid the misleading empty set
                     if assignment:
                         print(">> Consumer assignment:", assignment)
                         seen_assignment = True
-                now = time.time()
 
+                # TODO: check out the logic here
                 def merge_buffer(src_key: str, dst_key: str) -> None:
                     if src_key == dst_key:
                         return
@@ -471,27 +472,27 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                         dst_buf.events.extend(src_buf.events)
                         dst_buf.meta.extend(src_buf.meta)
                         dst_buf.first_seen = min(dst_buf.first_seen, src_buf.first_seen)
+                        dst_buf.last_seen = max(dst_buf.last_seen, src_buf.last_seen)
 
-                # flush stale buffers
-                if all(len(v) == 0 for v in polled.values()):
-                    stale_keys = [k for k, b in buffers.items() if b.should_flush(now)]
-                    for k in stale_keys:
-                        yield from flush_buffer(k, buffers[k])
-                    continue
-
+                # 3. Process each message
                 for records in polled.values():
                     for msg in records:
                         raw_value = msg.value
-                        cleaned = filter_pbft_event(raw_value)
+                        cleaned = filter_pbft_event(raw_value) # filter & clean
                         if not cleaned:
                             continue
 
-                        envelope = build_envelope(cleaned)
+                        envelope = build_envelope(cleaned) # build envelope
                         if not envelope:
                             continue
 
-                        event_type = envelope.get("type")
-                        phase_rank = PHASE_ORDER.get(event_type)
+                        event_type = envelope.get("type") #'ClientRequest' / 'PrePrepare' / 'Prepare' / 'Commit' / 'Reply'
+                        phase_rank = PHASE_ORDER.get(event_type) # 0..4
+
+                        # When a new client request arrives, force-close the previous final buffer
+                        if event_type == "ClientRequest" and active_final_key and active_final_key in buffers:
+                            yield from flush_buffer(active_final_key, buffers[active_final_key])
+                            active_final_key = None
 
                         seq_val = extract_order(cleaned.get("raw", {}))
                         if not isinstance(seq_val, int):
@@ -571,14 +572,6 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                             RequestBuffer(REQUEST_FLUSH_AFTER_SEC)
                         )
                         buf.add(envelope, phase_rank, cleaned.get("message_index"))
-
-                        if buf.should_flush(now):
-                            yield from flush_buffer(req_key, buf)
-
-                        # flush other stale buffers
-                        stale_keys = [k for k, b in buffers.items() if b.should_flush(now) and k != req_key]
-                        for k in stale_keys:
-                            yield from flush_buffer(k, buffers[k])
 
                 consumer.commit()
 
