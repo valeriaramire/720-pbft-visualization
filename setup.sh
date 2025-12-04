@@ -52,9 +52,11 @@ else
     fi
 
      # Start uvicorn in background
-    echo "[API] Starting uvicorn on 0.0.0.0:8002..."
-    nohup ./venv/bin/uvicorn main:app --host 0.0.0.0 --port 8002 \
-        > api.log 2>&1 &
+    echo "[API] Starting uvicorn on 0.0.0.0:8002 (split stdout/stderr logs)..."
+    mkdir -p logs
+    nohup ./venv/bin/uvicorn main:app --host 0.0.0.0 --port 8002 --access-log \
+        > logs/access.log \
+        2> logs/error.log &
 
     cd -
 fi
