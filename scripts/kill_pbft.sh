@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# This script kills all pbft_demo_json and wandlr processes
+# on the PBFT replicas and clients.
 
 # ------ VARS -----------
-CLIENTS=("client-1")
-REPLICAS=("replica-1" "replica-2" "replica-3" "replica-4")
 WANDLR_VERSION="wandlr"
-# ------------------------
 
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REMOTE_FILES_DIR="$BASE_DIR/remote-files"
+SERVERS_CUR="$REMOTE_FILES_DIR/servers.current.data"
+
+# Extract active replicas from servers.current.data
+mapfile -t REPLICAS < <(
+    awk '!/^#/ && /^\(replica-/{ sub(/^\(/,"",$1); print $1 }' "$SERVERS_CUR"
+)
+CLIENTS=("client-1") # single client assumed
+# ------------------------
 
 echo "Killing all pbft_demo_json and wandlr processes on replicas and clients..."
 for server in "${REPLICAS[@]}" "${CLIENTS[@]}"; do
