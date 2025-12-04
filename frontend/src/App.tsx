@@ -25,6 +25,9 @@ type Snapshot = {
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
+  const [highlightType, setHighlightType] = useState<
+    null | 'commit' | 'prepare' | 'preprepare' | 'reply'
+  >(null)
   const [mode, setMode] = useState<'demo' | 'live'>('demo')
   const [url, setUrl] = useState('http://localhost:8002/stream')
   const [demoRunning, setDemoRunning] = useState(false)
@@ -250,21 +253,25 @@ export default function App() {
       }
       if (env.type === 'PrePrepare') {
         pushSnapshot()
+        setHighlightType('preprepare')
         dispatch({ kind: 'prePrepare', seq: env.seq, from: env.from, to: env.to, t, eid: env.eid })
         return
       }
       if (env.type === 'Prepare') {
         pushSnapshot()
+        setHighlightType('prepare') 
         dispatch({ kind: 'prepare', from: env.from, to: env.to, t, eid: env.eid })
         return
       }
       if (env.type === 'Commit') {
         pushSnapshot()
+        setHighlightType('commit')
         dispatch({ kind: 'commit', from: env.from, to: env.to, t, eid: env.eid })
         return
       }
       if (env.type === 'Reply') {
         pushSnapshot()
+        setHighlightType('reply') 
         dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
         return
       }
@@ -636,7 +643,9 @@ export default function App() {
           eventLog={state.eventLog}
           stageLabel={state.stageLabel}
           stageSeq={state.stageSeq}
+          highlightType={highlightType}
         />
+
         <CanvasPanel
           canvasRef={canvasRef}
           canvasWrapRef={canvasWrapRef}

@@ -1,23 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# This script deploys PBFT replicas and clients
+# on the designated machines.
 
 # ------ VARS -----------
 WEBSERVER_IP="192.168.175.117"
 WANDLR_URL="http://$WEBSERVER_IP:8002/castest"
-# WANDLR_URL="https://jhellings.nl/castest.php"
 KAFKA_PROXY="$WEBSERVER_IP:8082"
 KAFKA_TOPIC="pbft-logs"
 WANDLR_VERSION="wandlr"
 
-CLIENTS=("client-1") # FIXED TO 1 CLIENT FOR PBFT
-REPLICAS=("replica-1" "replica-2" "replica-3" "replica-4")
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REMOTE_FILES_DIR="$BASE_DIR/remote-files"
+SERVERS_CUR="$REMOTE_FILES_DIR/servers.current.data"
 
-CLIENT_WAIT=1 # seconds between requests
+CLIENT_WAIT=2 # seconds between requests
 CLIENT_ROUNDS="${CLIENT_ROUNDS:-1}" # number of requests in this run (default 1)
+
+# Extract active replicas from servers.current.data
+mapfile -t REPLICAS < <(
+    awk '!/^#/ && /^\(replica-/{ sub(/^\(/,"",$1); print $1 }' "$SERVERS_CUR"
+)
+CLIENTS=("client-1") # FIXED TO 1 CLIENT 
 # ------------------------
-
-
+echo "========== PBFT Deployment =========="
 # Start the replicas and the clients.
 for i in ${!REPLICAS[@]}; do
     t=${REPLICAS[$i]}
@@ -27,7 +34,7 @@ for i in ${!REPLICAS[@]}; do
         > replica_output.log 2>&1 &" > out.txt 2>&1 &
 done
 
-sleep 5
+sleep 1
 
 for i in ${!CLIENTS[@]}; do
     c=${CLIENTS[$i]}
@@ -38,4 +45,4 @@ for i in ${!CLIENTS[@]}; do
         > client_output.log 2>&1 &" > out.txt 2>&1 &
 done
 
-echo "PBFT Deployment Complete."
+echo "========== PBFT Deployment complete =========="

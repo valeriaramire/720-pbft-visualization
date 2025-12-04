@@ -604,14 +604,12 @@ async def castest(
 @app.post("/start_run")
 async def start_run(
     message: str = Form("Default Request"),
-    rounds: int = Form(1),
-    num_replicas: int = Form(4),  
+    rounds: int = Form(1)
 ):
     """
     One user decision:
     - set the message that PBFT should use
     - configure how many rounds (requests) to send
-    - how many replicas to use 
     - kill any existing PBFT processes
     - start a fresh run 
     """
@@ -631,24 +629,65 @@ async def start_run(
     if r < 1:
         r = 1
 
-    # 3) sanitize num_replicas 
-    try:
-        nrep = int(num_replicas)
-    except ValueError:
-        nrep = current_replica_count
-    if nrep < 1:
-        nrep = 1
-    current_replica_count = nrep
+    # 3) Sync replica count with any /num_replicas changes and reset control state
+    current_replica_count = REPLICA_COUNT
     control_epoch = (control_epoch + 1) if control_epoch >= 0 else 0
     last_round_events.clear()
 
     # 4) Kill any existing PBFT processes
     subprocess.run(["bash", "../scripts/kill_pbft.sh"], check=False)
 
-    # 5) Start a new PBFT run with CLIENT_ROUNDS set
+    # 4) Start a new PBFT run with CLIENT_ROUNDS set
     env = os.environ.copy()
     env["CLIENT_ROUNDS"] = str(r)
 
     subprocess.Popen(["bash", "../scripts/deploy_pbft.sh"], env=env)
 
-    return {"status": "started", "rounds": r, "message": current_request}
+    return {
+        "status": "started",
+        "rounds": r,
+        "message": current_request,
+        "num_replicas": current_replica_count,
+    }
+
+@app.post("/num_replicas")
+async def set_num_replicas(num_replicas: int = Form(4)):
+    """
+    Manage the number of PBFT replicas independently of start_run.
+    """
+    global REPLICA_COUNT, current_replica_count, control_epoch, last_round_events
+
+    # Sanitize input
+    try:
+        new_count = int(num_replicas)
+    except ValueError:
+        new_count = 4
+    if new_count < 2: # min is 2
+        new_count = 2
+    if new_count > 10: # max is 10
+        new_count = 10
+
+    # If nothing changed, don't do a full reset
+    if new_count == REPLICA_COUNT:
+        return {"status": "unchanged", "num_replicas": REPLICA_COUNT}
+
+    # Kill any existing PBFT processes
+    subprocess.run(["bash", "../scripts/kill_pbft.sh"], check=False)
+    
+    REPLICA_COUNT = new_count
+    current_replica_count = new_count
+    control_epoch = (control_epoch + 1) if control_epoch >= 0 else 0
+    last_round_events.clear()
+
+    # Trigger PBFT reconfiguration (kill + regen configs + recopy)
+    try:
+        subprocess.run(
+            ["bash", "../scripts/reconfigure_pbft.sh", str(new_count)],
+            check=False,
+        )
+        status = "updated"
+    except Exception as e:
+        # We still return the new replica count, but indicate an error
+        status = f"error: {e!r}"
+
+    return {"status": status, "num_replicas": REPLICA_COUNT}

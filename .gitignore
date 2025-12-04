@@ -98,9 +98,9 @@ wandlr-source/
 
 # SOME MORE 
 outdated/
-remote-files/configs/
-remote-files/servers.data
-remote-files/servers4.data
+# remote-files/configs/
+# remote-files/servers.data
+# remote-files/servers4.data
 init_known_hosts
 out.txt
 

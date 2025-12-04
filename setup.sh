@@ -15,6 +15,7 @@ DIR_CONSUMER_API="api"
 DIR_REACT=""
 
 PBFT_SETUP_SCRIPT="scripts/setup_pbft.sh"
+PBFT_RECONFIG_SCRIPT="scripts/reconfigure_pbft.sh"
 ########## END VARS ##########
 
 
@@ -67,12 +68,13 @@ echo "Consumer API setup step complete."
 
 echo "========== 3. Setup PBFT replicas and clients =========="
 
-if [ ! -x "$PBFT_SETUP_SCRIPT" ]; then
-    echo "Error: $PBFT_SETUP_SCRIPT not found or not executable!"
+if [ ! -x "$PBFT_RECONFIG_SCRIPT" ]; then
+    echo "Error: $PBFT_RECONFIG_SCRIPT not found or not executable!"
     exit 1
 fi
 
-bash "$PBFT_SETUP_SCRIPT"
+# Force a clean 4-replica configuration on first setup
+bash "$PBFT_RECONFIG_SCRIPT" 4
 
 echo "PBFT replicas and clients deployed."
 
