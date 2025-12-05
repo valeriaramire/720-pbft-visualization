@@ -30,6 +30,7 @@ export default function App() {
   >(null)
   const [mode, setMode] = useState<'demo' | 'live'>('demo')
   const [url, setUrl] = useState('http://localhost:8002/stream')
+  const [numReplicas, setNumReplicas] = useState(1)
   const [demoRunning, setDemoRunning] = useState(false)
   const [demoEps, setDemoEps] = useState(3)
   const [nInput, setNInput] = useState<number>(initialState.n)
@@ -631,6 +632,9 @@ export default function App() {
         onLayoutChange={setLayout}
         paused={paused}
         onTogglePause={handleTogglePause}
+        numReplicas={numReplicas}
+        onNumReplicasChange={setNumReplicas}
+
       />
       <div className="content">
         <Sidebar

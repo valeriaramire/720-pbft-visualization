@@ -16,6 +16,8 @@ type TopBarProps = {
   onLiveMessageChange: (value: string) => void
   onSendLiveMessage: () => void
   liveSendStatus: 'idle' | 'sending' | 'ok' | 'error'
+  numReplicas: number
+  onNumReplicasChange: (value: number) => void
   demoRunning: boolean
   onStartDemo: () => void
   onStopDemo: () => void
@@ -71,6 +73,8 @@ export default function TopBar({
   paused,
   onTogglePause,
   liveSendStatus,
+  numReplicas,
+  onNumReplicasChange,
 }: TopBarProps) {
   const isLive = mode === 'live'
   const eventsPerSec = demoEps / 10
@@ -174,10 +178,36 @@ export default function TopBar({
           Lanes
         </button>
       </div>
-      <div className="right">
-        <span className={`status ${statusClass}`}>Status: {statusLabel}</span>
-        <span className="eid">last eid: {lastEid ?? '-'}</span>
+      <div className="right right-column">
+     <div className="status-row">
+  <span className={`status ${statusClass}`}>Status: {statusLabel}</span>
+  <span className="eid">last eid: {lastEid ?? '-'}</span>
+</div>
+        {isLive && (
+  <div className="replica-control">
+    <span className="replica-title">Number of Replicas</span>
+    <div className="replica-buttons">
+      <button
+        className="arrow-btn"
+        onClick={() => onNumReplicasChange(Math.max(1, numReplicas - 1))}
+      >
+        ◀
+      </button>
+      <span className="replica-count">{numReplicas}</span>
+      <button
+        className="arrow-btn"
+        onClick={() => onNumReplicasChange(numReplicas + 1)}
+      >
+        ▶
+      </button>
+    </div>
+  </div>
+)}
       </div>
+
+      
+
+
     </div>
   )
 }
