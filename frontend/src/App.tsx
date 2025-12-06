@@ -30,13 +30,14 @@ export default function App() {
   >(null)
   const [mode, setMode] = useState<'demo' | 'live'>('demo')
   const [url, setUrl] = useState('http://localhost:8002/stream')
-  const [numReplicas, setNumReplicas] = useState(1)
+  
   const [demoRunning, setDemoRunning] = useState(false)
   const [demoEps, setDemoEps] = useState(3)
   const [nInput, setNInput] = useState<number>(initialState.n)
   const [fInput, setFInput] = useState<number>(initialState.f)
   const [faultyInput, setFaultyInput] = useState<string>('')
   const [layout, setLayout] = useState<LayoutMode>('ring')
+  const [numReplicas, setNumReplicas] = useState(4)
   const [liveMessage, setLiveMessage] = useState<string>('')
   const [paused, setPaused] = useState(false)
   const [liveSendStatus, setLiveSendStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
@@ -596,6 +597,11 @@ export default function App() {
     animUntilRef.current = simTimeRef.current + flightMs
   }, [dispatch, flightMs])
 
+  const handleApplyReplicas = useCallback(() => {
+  dispatch({ kind: 'sessionStart', n: numReplicas, f: state.f })
+}, [dispatch, numReplicas, state.f])
+
+
   return (
     <div className="app">
       <TopBar
@@ -634,6 +640,9 @@ export default function App() {
         onTogglePause={handleTogglePause}
         numReplicas={numReplicas}
         onNumReplicasChange={setNumReplicas}
+        onApplyReplicas={handleApplyReplicas}
+        
+        
 
       />
       <div className="content">

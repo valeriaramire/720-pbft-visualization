@@ -37,6 +37,7 @@ type TopBarProps = {
   onLayoutChange: (mode: LayoutMode) => void
   paused: boolean
   onTogglePause: () => void
+  onApplyReplicas: () => void
 }
 
 export default function TopBar({
@@ -75,6 +76,8 @@ export default function TopBar({
   liveSendStatus,
   numReplicas,
   onNumReplicasChange,
+  onApplyReplicas,
+  
 }: TopBarProps) {
   const isLive = mode === 'live'
   const eventsPerSec = demoEps / 10
@@ -189,7 +192,7 @@ export default function TopBar({
     <div className="replica-buttons">
       <button
         className="arrow-btn"
-        onClick={() => onNumReplicasChange(Math.max(1, numReplicas - 1))}
+        onClick={() => onNumReplicasChange(Math.max(4, numReplicas - 1))}
       >
         ◀
       </button>
@@ -201,8 +204,14 @@ export default function TopBar({
         ▶
       </button>
     </div>
+
+    {/* NEW: Apply Button */}
+    <button className="btn" onClick={onApplyReplicas}>
+      Apply
+    </button>
   </div>
 )}
+
       </div>
 
       
