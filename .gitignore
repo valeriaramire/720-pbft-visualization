@@ -103,6 +103,7 @@ outdated/
 # remote-files/servers4.data
 init_known_hosts
 out.txt
+check_interleaving.py
 
 # DON't COPY PKEY
 *_id

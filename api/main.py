@@ -690,6 +690,20 @@ async def start_run(
         "num_replicas": current_replica_count,
     }
 
+@app.post("/reset_run")
+async def reset_run():
+    """
+    Kill any existing PBFT processes without starting a new run.
+    """
+    global current_request
+
+    # Kill any existing PBFT processes
+    subprocess.run(["bash", "../scripts/kill_pbft.sh"], check=False)
+
+    current_request = "Empty Request"
+
+    return {"status": "reset", "message": current_request}
+
 @app.post("/num_replicas")
 async def set_num_replicas(num_replicas: int = Form(4)):
     """
