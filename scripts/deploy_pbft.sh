@@ -15,7 +15,7 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE_FILES_DIR="$BASE_DIR/remote-files"
 SERVERS_CUR="$REMOTE_FILES_DIR/servers.current.data"
 
-CLIENT_WAIT=2 # seconds between requests
+CLIENT_WAIT=10 # seconds between requests
 CLIENT_ROUNDS="${CLIENT_ROUNDS:-1}" # number of requests in this run (default 1)
 
 # Extract active replicas from servers.current.data
