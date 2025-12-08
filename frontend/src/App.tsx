@@ -43,6 +43,7 @@ export default function App() {
   const [paused, setPaused] = useState(false)
   const [liveSendStatus, setLiveSendStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const [zoom, setZoom] = useState(1)
+  const [sseLogCount, setSseLogCount] = useState(0)
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasWrapRef = useRef<HTMLDivElement>(null)
@@ -53,6 +54,7 @@ export default function App() {
   const simTimeRef = useRef<number>(0)
   const lastRealTimeRef = useRef<number | null>(null)
   const liveQueueRef = useRef<Envelope[]>([])
+  const sseLogRef = useRef<Envelope[]>([])
   const animUntilRef = useRef<number | null>(null)
   const historyRef = useRef<Snapshot[]>([])
 
@@ -95,6 +97,8 @@ export default function App() {
   // SSE handler: just buffer raw envelopes, playback is controlled by speed slider
   const onEvent = useCallback((env: Envelope) => {
     liveQueueRef.current.push(env)
+    sseLogRef.current.push(env)
+    setSseLogCount((c) => c + 1)
   }, [])
 
   const { status, connect, disconnect } = useNDJSONSocket(url, onEvent, lastEidRef)
@@ -575,6 +579,25 @@ export default function App() {
     }
   }, [liveMessage, liveRounds])
 
+  const handleExportSseLog = useCallback(() => {
+    if (!sseLogRef.current.length) return
+    const lines = sseLogRef.current.map((e) => JSON.stringify(e))
+    const blob = new Blob([lines.join('\n')], { type: 'application/json' })
+    const urlObj = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = urlObj
+    a.download = `sse-log-${Date.now()}.ndjson`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(urlObj)
+  }, [])
+
+  const handleClearSseLog = useCallback(() => {
+    sseLogRef.current = []
+    setSseLogCount(0)
+  }, [])
+
   const statusLabel = mode === 'demo' ? (demoRunning ? 'demo' : 'idle') : status
   const statusClass = mode === 'demo' && demoRunning ? 'connected' : status
 
@@ -642,6 +665,9 @@ export default function App() {
         onLiveRoundsChange={setLiveRounds}
         onSendLiveMessage={handleSendLiveMessage}
         liveSendStatus={liveSendStatus}
+        sseLogCount={sseLogCount}
+        onExportSseLog={handleExportSseLog}
+        onClearSseLog={handleClearSseLog}
         demoRunning={demoRunning}
         onStartDemo={handleStartDemo}
         onStopDemo={handleStopDemo}

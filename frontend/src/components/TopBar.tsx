@@ -18,6 +18,9 @@ type TopBarProps = {
   onLiveRoundsChange: (value: number) => void
   onSendLiveMessage: () => void
   liveSendStatus: 'idle' | 'sending' | 'ok' | 'error'
+  sseLogCount: number
+  onExportSseLog: () => void
+  onClearSseLog: () => void
   numReplicas: number
   onNumReplicasChange: (value: number) => void
   demoRunning: boolean
@@ -78,6 +81,9 @@ export default function TopBar({
   paused,
   onTogglePause,
   liveSendStatus,
+  sseLogCount,
+  onExportSseLog,
+  onClearSseLog,
   numReplicas,
   onNumReplicasChange,
   onApplyReplicas,
@@ -136,6 +142,11 @@ export default function TopBar({
             <button className="btn" onClick={onSendLiveMessage} disabled={connectionStatus !== 'connected'}>
               Send
             </button>
+            <div className="sse-tools">
+              <span className="sse-count">log: {sseLogCount}</span>
+              <button className="btn" onClick={onExportSseLog} disabled={!sseLogCount}>Export</button>
+              <button className="btn" onClick={onClearSseLog} disabled={!sseLogCount}>Clear</button>
+            </div>
             <span className={`send-status send-${liveSendStatus}`}>
               {liveSendStatus === 'idle' && 'req: idle'}
               {liveSendStatus === 'sending' && 'req: sending'}
