@@ -602,9 +602,25 @@ export default function App() {
     animUntilRef.current = simTimeRef.current + flightMs
   }, [dispatch, flightMs])
 
-  const handleApplyReplicas = useCallback(() => {
-  dispatch({ kind: 'sessionStart', n: numReplicas, f: state.f })
-}, [dispatch, numReplicas, state.f])
+  const handleApplyReplicas = useCallback(async () => {
+    // Update backend replica count, then reflect in local reducer.
+    try {
+      const body = new URLSearchParams()
+      body.append('num_replicas', String(Math.max(2, Math.floor(numReplicas))))
+      const res = await fetch('http://localhost:8002/num_replicas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      })
+      if (res.ok) {
+        const data = await res.json().catch(() => null as any)
+        const nVal = typeof data?.num_replicas === 'number' ? data.num_replicas : Math.max(2, numReplicas)
+        dispatch({ kind: 'sessionStart', n: nVal, f: state.f })
+      }
+    } catch (e) {
+      console.error('Failed to apply replicas', e)
+    }
+  }, [numReplicas, state.f, dispatch])
 
 
   return (

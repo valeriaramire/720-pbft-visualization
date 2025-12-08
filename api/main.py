@@ -52,6 +52,7 @@ REQUEST_FLUSH_AFTER_SEC = float(os.getenv("PBFT_REQUEST_FLUSH_SEC", "12.0"))
 MAX_REQUEST_BUFFERS = int(os.getenv("PBFT_MAX_INFLIGHT_REQUESTS", "64"))
 # Default ON; set PBFT_DEBUG_BUFFERS=0 to disable
 DEBUG_BUFFERS = os.getenv("PBFT_DEBUG_BUFFERS", "1") != "0"
+DEBUG_EVENT_LOG_PATH = os.getenv("PBFT_EVENT_LOG_PATH", "./event_dump.log")
 
 _last_eid_assigned = 0
 
@@ -382,6 +383,15 @@ def stamp_and_format_event(event: Dict[str, Any]) -> str:
     return f"id: {event['eid']}\ndata: {payload}\n\n"
 
 
+def _append_debug_line(line: str) -> None:
+    try:
+        with open(DEBUG_EVENT_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        # best-effort debug logging; ignore failures
+        pass
+
+
 def build_control_event(event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "schema_ver": SCHEMA_VERSION,
@@ -441,6 +451,7 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
             f"seqs={seqs} senders={senders} eid_span={eid_span}"
         )
         for line in lines:
+            _append_debug_line(line)
             yield line
         if remember:
             last_round_events.clear()
@@ -463,7 +474,9 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
             # Send initial control and latest round history
             if control_epoch >= 0 and control_epoch != last_sent_epoch:
                 for ctrl in control_events():
-                    yield stamp_and_format_event(ctrl)
+                    line = stamp_and_format_event(ctrl)
+                    _append_debug_line(line)
+                    yield line
                 last_sent_epoch = control_epoch
             if last_round_events:
                 for line in last_round_events:
@@ -473,7 +486,9 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                 # 1. Send control events if new epoch started
                 if control_epoch >= 0 and control_epoch != last_sent_epoch:
                     for ctrl in control_events():
-                        yield stamp_and_format_event(ctrl)
+                        line = stamp_and_format_event(ctrl)
+                        _append_debug_line(line)
+                        yield line
                     last_sent_epoch = control_epoch
                     # Reset state for a new session/run
                     for k, buf in list(buffers.items()):
@@ -592,7 +607,9 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
 
                         # bypass unknown types
                         if phase_rank is None:
-                            yield stamp_and_format_event(envelope)
+                            line = stamp_and_format_event(envelope)
+                            _append_debug_line(line)
+                            yield line
                             continue
 
                         # limit # of active buffers

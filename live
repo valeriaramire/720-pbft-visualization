@@ -1,0 +1,51 @@
+id: 252
+data: {"schema_ver": 1, "type": "SessionStart", "ts": 1765228413284530, "sid": "pbft-session", "eid": 252, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"n": 4, "f": 1}}
+
+id: 253
+data: {"schema_ver": 1, "type": "PrimaryElected", "ts": 1765228413284538, "sid": "pbft-session", "eid": 253, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"primary": 0}}
+
+id: 245
+data: {"schema_ver": 1, "type": "Prepare", "ts": 178927264305989, "sid": "pbft-session", "eid": 245, "view": 0, "seq": 1, "from": 2, "to": [1], "data": {"instance": 0, "message-index": 4, "message-name": "prepare", "message": {"prid": 2, "proposal": {"message": {"pid": 0, "view": 0, "order": 1, "digest": "0x7B26CA21291812FAD88DC3232F2393CE918EAFB0B21E5A07238F62287D8690B7"}, "signature": "0xBB8EB11A5B3D42E13E41830DCA73B27D10A3B6B0B4869785CC118EAFFF2651073E4600D2237E1BC41838AC1C34ED1ABA6A6398762158A3BF9B1F1D391A0603063BE75C4E0EA4A7D666CDB9F092869065F4DF9CB717C20380796E6C3B60620846"}}, "signature": "0x888C06F8A2598D0FEA39E83CCE3DC8C4AE44257AC9FDCE23CF59764A4200649907E98619B6F43C3C5F71DBFDBF425490F725340F5680390C718FAE34DC2EC8037663EAD5AB23770809357EA4941D049593E6F3FCEE5150940160AD151F9C7186", "connection": {"participant": 2, "address": {"host": "192.168.175.73", "port": 1247}, "version": 0}}}
+
+id: 246
+data: {"schema_ver": 1, "type": "Commit", "ts": 178925520616154, "sid": "pbft-session", "eid": 246, "view": 0, "seq": 1, "from": 1, "to": [2], "data": {"instance": 11, "message-index": 5, "message-name": "commit", "message": {"crid": 1, "proposal": {"message": {"pid": 0, "view": 0, "order": 1, "digest": "0x7B26CA21291812FAD88DC3232F2393CE918EAFB0B21E5A07238F62287D8690B7"}, "signature": "0xBB8EB11A5B3D42E13E41830DCA73B27D10A3B6B0B4869785CC118EAFFF2651073E4600D2237E1BC41838AC1C34ED1ABA6A6398762158A3BF9B1F1D391A0603063BE75C4E0EA4A7D666CDB9F092869065F4DF9CB717C20380796E6C3B60620846"}}, "signature": "0x13524277763D19539738D99373A6D3CC18856B23EC6F4964BD808C954E27B24F8A8E831DA8C552E5963F172291C9AF2FCD8D764EC057C2314013A678A9FB980CA4481726AAC59DCFD6BDB79DE06D1B8C9CD7881B0B8451F4EDB42ECF49560F8F", "connection": {"participant": 1, "address": {"host": "192.168.175.82", "port": 36843}, "version": 0}}}
+
+id: 247
+data: {"schema_ver": 1, "type": "Commit", "ts": 178923455130265, "sid": "pbft-session", "eid": 247, "view": 0, "seq": 1, "from": 1, "to": [3], "data": {"instance": 10, "message-index": 5, "message-name": "commit", "message": {"crid": 1, "proposal": {"message": {"pid": 0, "view": 0, "order": 1, "digest": "0x7B26CA21291812FAD88DC3232F2393CE918EAFB0B21E5A07238F62287D8690B7"}, "signature": "0xBB8EB11A5B3D42E13E41830DCA73B27D10A3B6B0B4869785CC118EAFFF2651073E4600D2237E1BC41838AC1C34ED1ABA6A6398762158A3BF9B1F1D391A0603063BE75C4E0EA4A7D666CDB9F092869065F4DF9CB717C20380796E6C3B60620846"}}, "signature": "0x13524277763D19539738D99373A6D3CC18856B23EC6F4964BD808C954E27B24F8A8E831DA8C552E5963F172291C9AF2FCD8D764EC057C2314013A678A9FB980CA4481726AAC59DCFD6BDB79DE06D1B8C9CD7881B0B8451F4EDB42ECF49560F8F", "connection": {"participant": 1, "address": {"host": "192.168.175.82", "port": 33689}, "version": 0}}}
+
+id: 248
+data: {"schema_ver": 1, "type": "Commit", "ts": 178926968216734, "sid": "pbft-session", "eid": 248, "view": 0, "seq": 1, "from": 2, "to": [0], "data": {"instance": 8, "message-index": 5, "message-name": "commit", "message": {"crid": 2, "proposal": {"message": {"pid": 0, "view": 0, "order": 1, "digest": "0x7B26CA21291812FAD88DC3232F2393CE918EAFB0B21E5A07238F62287D8690B7"}, "signature": "0xBB8EB11A5B3D42E13E41830DCA73B27D10A3B6B0B4869785CC118EAFFF2651073E4600D2237E1BC41838AC1C34ED1ABA6A6398762158A3BF9B1F1D391A0603063BE75C4E0EA4A7D666CDB9F092869065F4DF9CB717C20380796E6C3B60620846"}}, "signature": "0xF0613E2ED972BE2229DCCC14851CBF5C279BDCE32F27620D889B1C9BF6B708D865CF23E92FD593CB9AA0F7D6DF73D8A3894242BBA967E85381DC62D2636D5E0872214007117227713F963BC6E7A8238FD630BEF774EB2E01575FD7587193E918", "connection": {"participant": 2, "address": {"host": "192.168.175.73", "port": 1247}, "version": 0}}}
+
+id: 249
+data: {"schema_ver": 1, "type": "Commit", "ts": 178927264337681, "sid": "pbft-session", "eid": 249, "view": 0, "seq": 1, "from": 2, "to": [1], "data": {"instance": 0, "message-index": 5, "message-name": "commit", "message": {"crid": 2, "proposal": {"message": {"pid": 0, "view": 0, "order": 1, "digest": "0x7B26CA21291812FAD88DC3232F2393CE918EAFB0B21E5A07238F62287D8690B7"}, "signature": "0xBB8EB11A5B3D42E13E41830DCA73B27D10A3B6B0B4869785CC118EAFFF2651073E4600D2237E1BC41838AC1C34ED1ABA6A6398762158A3BF9B1F1D391A0603063BE75C4E0EA4A7D666CDB9F092869065F4DF9CB717C20380796E6C3B60620846"}}, "signature": "0xF0613E2ED972BE2229DCCC14851CBF5C279BDCE32F27620D889B1C9BF6B708D865CF23E92FD593CB9AA0F7D6DF73D8A3894242BBA967E85381DC62D2636D5E0872214007117227713F963BC6E7A8238FD630BEF774EB2E01575FD7587193E918", "connection": {"participant": 2, "address": {"host": "192.168.175.73", "port": 1247}, "version": 0}}}
+
+id: 250
+data: {"schema_ver": 1, "type": "Commit", "ts": 178925522982744, "sid": "pbft-session", "eid": 250, "view": 0, "seq": 1, "from": 3, "to": [2], "data": {"instance": 9, "message-index": 5, "message-name": "commit", "message": {"crid": 3, "proposal": {"message": {"pid": 0, "view": 0, "order": 1, "digest": "0x7B26CA21291812FAD88DC3232F2393CE918EAFB0B21E5A07238F62287D8690B7"}, "signature": "0xBB8EB11A5B3D42E13E41830DCA73B27D10A3B6B0B4869785CC118EAFFF2651073E4600D2237E1BC41838AC1C34ED1ABA6A6398762158A3BF9B1F1D391A0603063BE75C4E0EA4A7D666CDB9F092869065F4DF9CB717C20380796E6C3B60620846"}}, "signature": "0xE3C9B29018D2315CC3320D55F846188717CF6A47951E116E7EB9B7BFD579E46FEC95AC7671B20E2C3AFB8DE78A2979953ABFEE6436CF9837D110884D287C9C090494A5BEB752913FFBF1AFBD7A24DB954451E3DE41D4AB4EE1F6736F8509096C", "connection": {"participant": 3, "address": {"host": "192.168.175.141", "port": 1247}, "version": 0}}}
+
+id: 251
+data: {"schema_ver": 1, "type": "Reply", "ts": 178918280232773, "sid": "pbft-session", "eid": 251, "view": 0, "seq": 1, "from": 1, "to": [4], "data": {"instance": 1, "message-index": 7, "message-name": "inform", "message": {"rid": 1, "current_view": 0, "order": 1, "cid": 4, "rank": 1, "result": 2316897219}, "signature": "0xCC76F9E8E0F2DD90DB953017094452E09C8BA77AF25F62288BA2AFD862942B53B25E347CBC378A6779F818AC95E9CBDC7C748477CAADE9A59269F5BDD7B73B04A2C93C5C67635E517AA6DAE0776576783CB95468BA5C67F93B48945A2319A3F5", "connection": {"participant": 1, "address": {"host": "192.168.175.82", "port": 1247}, "version": 0}}}
+
+id: 255
+data: {"schema_ver": 1, "type": "SessionStart", "ts": 1765228598416203, "sid": "pbft-session", "eid": 255, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"n": 4, "f": 1}}
+
+id: 263
+data: {"schema_ver": 1, "type": "PrimaryElected", "ts": 1765228598416206, "sid": "pbft-session", "eid": 263, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"primary": 0}}
+
+id: 296
+data: {"schema_ver": 1, "type": "SessionStart", "ts": 1765228665572350, "sid": "pbft-session", "eid": 296, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"n": 4, "f": 1}}
+
+id: 301
+data: {"schema_ver": 1, "type": "PrimaryElected", "ts": 1765228665572354, "sid": "pbft-session", "eid": 301, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"primary": 0}}
+
+id: 369
+data: {"schema_ver": 1, "type": "SessionStart", "ts": 1765229328540723, "sid": "pbft-session", "eid": 369, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"n": 4, "f": 1}}
+
+id: 380
+data: {"schema_ver": 1, "type": "PrimaryElected", "ts": 1765229328540727, "sid": "pbft-session", "eid": 380, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"primary": 0}}
+
+id: 410
+data: {"schema_ver": 1, "type": "SessionStart", "ts": 1765229405526089, "sid": "pbft-session", "eid": 410, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"n": 4, "f": 1}}
+
+id: 420
+data: {"schema_ver": 1, "type": "PrimaryElected", "ts": 1765229405526094, "sid": "pbft-session", "eid": 420, "view": 0, "seq": 0, "from": -1, "to": [], "data": {"primary": 0}}
+
