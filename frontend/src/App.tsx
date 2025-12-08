@@ -39,6 +39,7 @@ export default function App() {
   const [layout, setLayout] = useState<LayoutMode>('ring')
   const [numReplicas, setNumReplicas] = useState(4)
   const [liveMessage, setLiveMessage] = useState<string>('')
+  const [liveRounds, setLiveRounds] = useState<number>(1)
   const [paused, setPaused] = useState(false)
   const [liveSendStatus, setLiveSendStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const [zoom, setZoom] = useState(1)
@@ -557,19 +558,22 @@ export default function App() {
     if (!liveMessage.trim()) return
     setLiveSendStatus('sending')
     try {
-      const res = await fetch('http://localhost:8002/set_request', {
+      const body = new URLSearchParams()
+      body.append('message', liveMessage)
+      body.append('rounds', String(Math.max(1, Math.floor(liveRounds))))
+      const res = await fetch('http://localhost:8002/start_run', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: JSON.stringify({ message: liveMessage }),
+        body,
       })
       setLiveSendStatus(res.ok ? 'ok' : 'error')
     } catch (e) {
       console.error('Failed to send live request', e)
       setLiveSendStatus('error')
     }
-  }, [liveMessage])
+  }, [liveMessage, liveRounds])
 
   const statusLabel = mode === 'demo' ? (demoRunning ? 'demo' : 'idle') : status
   const statusClass = mode === 'demo' && demoRunning ? 'connected' : status
@@ -618,6 +622,8 @@ export default function App() {
         onDisconnect={disconnect}
         liveMessage={liveMessage}
         onLiveMessageChange={setLiveMessage}
+        liveRounds={liveRounds}
+        onLiveRoundsChange={setLiveRounds}
         onSendLiveMessage={handleSendLiveMessage}
         liveSendStatus={liveSendStatus}
         demoRunning={demoRunning}

@@ -14,6 +14,8 @@ type TopBarProps = {
   onDisconnect: () => void
   liveMessage: string
   onLiveMessageChange: (value: string) => void
+  liveRounds: number
+  onLiveRoundsChange: (value: number) => void
   onSendLiveMessage: () => void
   liveSendStatus: 'idle' | 'sending' | 'ok' | 'error'
   numReplicas: number
@@ -70,6 +72,8 @@ export default function TopBar({
   onToggleMode,
   liveMessage,
   onLiveMessageChange,
+  liveRounds,
+  onLiveRoundsChange,
   onSendLiveMessage,
   paused,
   onTogglePause,
@@ -117,6 +121,17 @@ export default function TopBar({
               value={liveMessage}
               onChange={(e) => onLiveMessageChange(e.target.value)}
               spellCheck={false}
+            />
+            <input
+              className="smallinput"
+              type="number"
+              min={1}
+              max={20}
+              value={liveRounds}
+              onChange={(e) =>
+                onLiveRoundsChange(Math.max(1, parseInt(e.target.value || '1', 10) || 1))
+              }
+              title="Rounds"
             />
             <button className="btn" onClick={onSendLiveMessage} disabled={connectionStatus !== 'connected'}>
               Send
