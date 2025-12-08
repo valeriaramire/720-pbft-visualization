@@ -163,7 +163,7 @@ export default function App() {
     [tickMs],
   )
 
-  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, simTimeRef, flightMs)
+  useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, simTimeRef, flightMs, paused)
 
   useEffect(() => {
     const canvas = canvasRef.current

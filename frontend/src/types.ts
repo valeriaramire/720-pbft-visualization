@@ -1,4 +1,4 @@
-export type Phase = 'idle' | 'preprepare' | 'prepare' | 'commit'
+export type Phase = 'idle' | 'preprepare' | 'prepare' | 'commit' | 'reply'
 export type EventType = 'ClientRequest' | 'PrePrepare' | 'Prepare' | 'Commit' | 'Reply' | 'SessionStart' | 'PrimaryElected'
 
 export type Envelope = {

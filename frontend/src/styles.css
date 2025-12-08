@@ -148,21 +148,11 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 }
 
 
-.legend-color.commit {
-  background: #66d08b;
-}
-.legend-color.prepare {
-  background: #4ea3ff;
-}
-.legend-color.preprepare {
-  background: #ffd14a;
-}
-.legend-color.reply {
-  background: #45d6d1;
-}
-.legend-color.idle {
-  background: #555a78;
-}
+.legend-color.commit { background: #66d08b; }
+.legend-color.prepare { background: #ff9e57; }
+.legend-color.preprepare { background: #4ea3ff; }
+.legend-color.reply { background: #ffd94a; }
+.legend-color.idle { background: #555a78; }
 
 
 
@@ -218,9 +208,9 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 
 
 .legend-color.commit { background: #66d08b; }
-.legend-color.prepare { background: #4ea3ff; }
-.legend-color.preprepare { background: #ffd14a; }
-.legend-color.reply { background: #45d6d1; }
+.legend-color.prepare { background: #ff9e57; }
+.legend-color.preprepare { background: #4ea3ff; }
+.legend-color.reply { background: #ffd94a; }
 .legend-color.idle { background: #555a78; }
 
 

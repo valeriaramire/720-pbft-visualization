@@ -108,8 +108,11 @@ export function reducer(state: State, action: Action): State {
       const desc = `Reply · from ${action.from} → client`
       const eventLog = [...state.eventLog, desc].slice(-8)
       const pulse = { type: 'Reply', from: action.from, to: [-1], t: action.t }
+      const phases = new Map(state.nodePhase)
+      phases.set(action.from, 'reply')
       return {
         ...state,
+        nodePhase: phases,
         messages: [pulse],
         lastEid: action.eid,
         stageLabel: 'Reply',

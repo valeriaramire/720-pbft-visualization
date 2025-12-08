@@ -39,6 +39,7 @@ export function useCanvasRenderer(
   markersRef?: React.MutableRefObject<MessageMarker[]>,
   timeRef?: React.MutableRefObject<number | null>,
   flightMs: number = 1800,
+  paused: boolean = false,
 ) {
   const colors = {
     bg: '#0f1424',
@@ -205,9 +206,13 @@ export function useCanvasRenderer(
           continue
         }
       }
+      const prepColor = colors.prepare
+      const ppColor = colors.preprepare
+      const commitColor = colors.commit
+
       for (let i = 0; i < n; i++) {
         const y = laneY(i)
-        ctx.fillStyle = colors.preprepare
+        ctx.fillStyle = ppColor
         ctx.beginPath()
         ctx.arc(ppX, y, 7, 0, Math.PI * 2)
         ctx.fill()
@@ -215,7 +220,7 @@ export function useCanvasRenderer(
         ctx.lineWidth = 1
         ctx.stroke()
 
-        ctx.fillStyle = colors.prepare
+        ctx.fillStyle = prepColor
         ctx.beginPath()
         ctx.arc(prepX, y, 7, 0, Math.PI * 2)
         ctx.fill()
@@ -223,7 +228,7 @@ export function useCanvasRenderer(
         ctx.lineWidth = 1
         ctx.stroke()
 
-        ctx.fillStyle = colors.commit
+        ctx.fillStyle = commitColor
         ctx.beginPath()
         ctx.arc(comX, y, 7.5, 0, Math.PI * 2)
         ctx.fill()
@@ -231,7 +236,7 @@ export function useCanvasRenderer(
         ctx.lineWidth = 2
         ctx.stroke()
 
-        ctx.fillStyle = colors.commit
+        ctx.fillStyle = commitColor
         ctx.beginPath()
         ctx.arc(comFanX, y, 7, 0, Math.PI * 2)
         ctx.fill()
@@ -335,14 +340,17 @@ export function useCanvasRenderer(
     for (let i = 0; i < n; i++) {
       const pos = positions[i]
       const phase = state.nodePhase.get(i) || 'idle'
-      const fill =
+      const phaseColor =
         phase === 'idle'
           ? colors.idle
           : phase === 'preprepare'
             ? colors.preprepare
             : phase === 'prepare'
               ? colors.prepare
-              : colors.commit
+              : phase === 'reply'
+                ? colors.reply
+                : colors.commit
+      const fill = phaseColor
       ctx.fillStyle = fill
       ctx.beginPath()
       ctx.arc(pos.x, pos.y, nodeR, 0, Math.PI * 2)
@@ -369,7 +377,7 @@ export function useCanvasRenderer(
     ctx.beginPath()
     ctx.arc(cx, cy, radius + 24, 0, Math.PI * 2)
     ctx.stroke()
-  }, [canvasRef, state.messages, state.n, state.nodePhase, faultySet, mode, markersRef])
+  }, [canvasRef, state.messages, state.n, state.nodePhase, faultySet, mode, markersRef, paused])
 
   useEffect(() => {
     let raf = 0
