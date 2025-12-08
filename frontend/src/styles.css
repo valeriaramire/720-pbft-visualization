@@ -81,10 +81,48 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .edu-text { margin-top: 4px; font-size: 12px; line-height: 1.4; }
 .edu-text-detail { margin-top: 2px; opacity: 0.9; }
 
-.canvaswrap { position: relative; display: flex; flex-direction: column; }
-.canvas-scroll { width: 100%; height: 100%; overflow: hidden; }
+.canvaswrap { position: relative; display: flex; flex-direction: column; min-height: 420px; }
+.canvas-scroll { width: 100%; height: 100%; overflow: auto; }
 .canvas-scroll.is-scrollable { overflow-y: auto; overscroll-behavior: contain; }
+.canvas-zoom { position: relative; }
 .canvas { width: 100%; height: 100%; display: block; }
+
+.zoom-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(15, 20, 36, 0.7);
+  border: 1px solid #2a376c;
+  border-radius: 999px;
+  padding: 6px 10px;
+  backdrop-filter: blur(6px);
+}
+
+.zoom-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #3a4a82;
+  background: rgba(78, 163, 255, 0.15);
+  color: #e6ebff;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.zoom-btn:hover {
+  background: rgba(78, 163, 255, 0.25);
+}
+
+.zoom-readout {
+  font-size: 12px;
+  opacity: 0.85;
+  min-width: 44px;
+  text-align: center;
+}
 
 .stagehud { position: absolute; left: 12px; top: 12px; background: rgba(17,23,43,0.8); border: 1px solid #2a376c; border-radius: 8px; padding: 6px 10px; pointer-events: none; }
 .stagetext { font-size: 13px; color: var(--text); opacity: 0.95; }

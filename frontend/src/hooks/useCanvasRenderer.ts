@@ -209,6 +209,7 @@ export function useCanvasRenderer(
       const prepColor = colors.prepare
       const ppColor = colors.preprepare
       const commitColor = colors.commit
+      const replyColor = colors.reply
 
       for (let i = 0; i < n; i++) {
         const y = laneY(i)
@@ -236,7 +237,7 @@ export function useCanvasRenderer(
         ctx.lineWidth = 2
         ctx.stroke()
 
-        ctx.fillStyle = commitColor
+        ctx.fillStyle = replyColor
         ctx.beginPath()
         ctx.arc(comFanX, y, 7, 0, Math.PI * 2)
         ctx.fill()
@@ -259,7 +260,7 @@ export function useCanvasRenderer(
     const PULSE_MS = flightMs
     const messages = state.messages.filter((m) => now - m.t < PULSE_MS)
 
-    const clientPos = { x: cx, y: cy - (radius + 160) }
+    const clientPos = { x: cx, y: Math.max(60, cy - (radius + 120)) }
     ctx.fillStyle = colors.client
     ctx.beginPath()
     ctx.arc(clientPos.x, clientPos.y, Math.max(6, nodeR * 0.8), 0, Math.PI * 2)

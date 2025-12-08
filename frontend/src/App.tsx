@@ -41,6 +41,7 @@ export default function App() {
   const [liveMessage, setLiveMessage] = useState<string>('')
   const [paused, setPaused] = useState(false)
   const [liveSendStatus, setLiveSendStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
+  const [zoom, setZoom] = useState(1)
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasWrapRef = useRef<HTMLDivElement>(null)
@@ -669,6 +670,8 @@ export default function App() {
           commitCount={state.commits.size}
           quorumThreshold={quorumThreshold}
           hoverInfo={hoverInfo}
+          zoom={zoom}
+          onZoomChange={setZoom}
         />
       </div>
     </div>

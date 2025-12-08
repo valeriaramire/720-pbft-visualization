@@ -21,6 +21,8 @@ type CanvasPanelProps = {
   commitCount: number
   quorumThreshold: number
   hoverInfo: HoverInfo | null
+  zoom: number
+  onZoomChange: (value: number) => void
 }
 
 export default function CanvasPanel({
@@ -33,13 +35,37 @@ export default function CanvasPanel({
   commitCount,
   quorumThreshold,
   hoverInfo,
+  zoom,
+  onZoomChange,
 }: CanvasPanelProps) {
   const scrollClass = `canvas-scroll${laneScroll.needScroll ? ' is-scrollable' : ''}`
-  const canvasStyle = laneScroll.virtualHeight ? { height: laneScroll.virtualHeight } : undefined
+  const BASE_W = 1200
+  const BASE_H = (laneScroll.virtualHeight ?? 1200) + 200
+  const zoomStyle: React.CSSProperties = {
+    width: `${BASE_W}px`,
+    height: `${BASE_H}px`,
+    minWidth: '100%',
+    minHeight: BASE_H,
+    position: 'relative',
+  }
+  const canvasStyle: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    display: 'block',
+    transform: `scale(${zoom})`,
+    transformOrigin: 'top left',
+  }
   return (
     <div className="canvaswrap" ref={canvasWrapRef}>
       <div className={scrollClass}>
-        <canvas ref={canvasRef} className="canvas" style={canvasStyle} />
+        <div className="canvas-zoom" style={zoomStyle}>
+          <canvas ref={canvasRef} className="canvas" style={canvasStyle} />
+        </div>
+      </div>
+      <div className="zoom-controls">
+        <button className="zoom-btn" onClick={() => onZoomChange(Math.max(0.5, zoom - 0.1))}>−</button>
+        <div className="zoom-readout">{Math.round(zoom * 100)}%</div>
+        <button className="zoom-btn" onClick={() => onZoomChange(Math.min(2, zoom + 0.1))}>＋</button>
       </div>
       <div className="stagehud">
         <div className="stagetext">Stage: {stageLabel} · seq: {stageSeq ?? '-'}</div>
