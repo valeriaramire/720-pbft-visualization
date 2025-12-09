@@ -19,6 +19,8 @@ type TopBarProps = {
   onSendLiveMessage: () => void
   liveSendStatus: 'idle' | 'sending' | 'ok' | 'error'
   sseLogCount: number
+  liveQueued: number
+  lastLiveType: string | null
   onExportSseLog: () => void
   onClearSseLog: () => void
   numReplicas: number
@@ -82,6 +84,8 @@ export default function TopBar({
   onTogglePause,
   liveSendStatus,
   sseLogCount,
+  liveQueued,
+  lastLiveType,
   onExportSseLog,
   onClearSseLog,
   numReplicas,
@@ -115,44 +119,54 @@ export default function TopBar({
         </span>
         {isLive && (
           <>
-            <input className="urlinput" value={url} onChange={(e) => onUrlChange(e.target.value)} spellCheck={false} />
             {connectionStatus !== 'connected' ? (
               <button className="btn" onClick={onConnect}>Connect</button>
             ) : (
-              <button className="btn" onClick={onDisconnect}>Disconnect</button>
+              <>
+                <button className="btn" onClick={onTogglePause}>{paused ? 'Continue' : 'Pause'}</button>
+                <button className="btn" onClick={onStopDemo}>Stop</button>
+                {paused && (
+                  <>
+                    <button className="btn" onClick={onPrevStep}>Step Back</button>
+                    <button className="btn" onClick={onNextStep}>Next Step</button>
+                  </>
+                )}
+                <input
+                  className="urlinput"
+                  placeholder="Message to send"
+                  value={liveMessage}
+                  onChange={(e) => onLiveMessageChange(e.target.value)}
+                  spellCheck={false}
+                />
+                <input
+                  className="smallinput"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={liveRounds}
+                  onChange={(e) =>
+                    onLiveRoundsChange(Math.max(1, parseInt(e.target.value || '1', 10) || 1))
+                  }
+                  title="Rounds"
+                />
+                <button className="btn" onClick={onSendLiveMessage}>
+                  Send
+                </button>
+                <div className="sse-tools">
+                  <span className="sse-count">recv: {sseLogCount}</span>
+                  <span className="sse-count">queue: {liveQueued}</span>
+                  <span className="sse-count">last: {lastLiveType ?? '-'}</span>
+                  <button className="btn" onClick={onExportSseLog} disabled={!sseLogCount}>Export</button>
+                  <button className="btn" onClick={onClearSseLog} disabled={!sseLogCount}>Clear</button>
+                </div>
+                <span className={`send-status send-${liveSendStatus}`}>
+                  {liveSendStatus === 'idle' && 'req: idle'}
+                  {liveSendStatus === 'sending' && 'req: sending'}
+                  {liveSendStatus === 'ok' && 'req: ok'}
+                  {liveSendStatus === 'error' && 'req: error'}
+                </span>
+              </>
             )}
-            <input
-              className="urlinput"
-              placeholder="Message to send"
-              value={liveMessage}
-              onChange={(e) => onLiveMessageChange(e.target.value)}
-              spellCheck={false}
-            />
-            <input
-              className="smallinput"
-              type="number"
-              min={1}
-              max={20}
-              value={liveRounds}
-              onChange={(e) =>
-                onLiveRoundsChange(Math.max(1, parseInt(e.target.value || '1', 10) || 1))
-              }
-              title="Rounds"
-            />
-            <button className="btn" onClick={onSendLiveMessage} disabled={connectionStatus !== 'connected'}>
-              Send
-            </button>
-            <div className="sse-tools">
-              <span className="sse-count">log: {sseLogCount}</span>
-              <button className="btn" onClick={onExportSseLog} disabled={!sseLogCount}>Export</button>
-              <button className="btn" onClick={onClearSseLog} disabled={!sseLogCount}>Clear</button>
-            </div>
-            <span className={`send-status send-${liveSendStatus}`}>
-              {liveSendStatus === 'idle' && 'req: idle'}
-              {liveSendStatus === 'sending' && 'req: sending'}
-              {liveSendStatus === 'ok' && 'req: ok'}
-              {liveSendStatus === 'error' && 'req: error'}
-            </span>
           </>
         )}
         {!isLive && (

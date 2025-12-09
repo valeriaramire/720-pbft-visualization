@@ -45,6 +45,9 @@ export default function App() {
   const [liveSendStatus, setLiveSendStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const [zoom, setZoom] = useState(1)
   const [sseLogCount, setSseLogCount] = useState(0)
+  const [replicaStatus, setReplicaStatus] = useState<string>('')
+  const [liveQueued, setLiveQueued] = useState(0)
+  const [lastLiveType, setLastLiveType] = useState<string | null>(null)
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasWrapRef = useRef<HTMLDivElement>(null)
@@ -237,6 +240,64 @@ export default function App() {
     }
   }, [demoRunning, state.n, state.f, faultyInput, dispatch])
 
+  const processEnvelope = useCallback(
+    (env: Envelope, animate: boolean) => {
+      const t = simTimeRef.current
+      const setAnim = () => {
+        if (animate && paused) {
+          animUntilRef.current = simTimeRef.current + flightMs
+        }
+      }
+      if (env.type === 'SessionStart') {
+        pushSnapshot()
+        dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
+        setAnim()
+        return
+      }
+      if (env.type === 'PrimaryElected') {
+        pushSnapshot()
+        dispatch({ kind: 'primaryElected' })
+        setAnim()
+        return
+      }
+      if (env.type === 'ClientRequest') {
+        pushSnapshot()
+        dispatch({ kind: 'client', to: 0, t, eid: env.eid })
+        setAnim()
+        return
+      }
+      if (env.type === 'PrePrepare') {
+        pushSnapshot()
+        setHighlightType('preprepare')
+        dispatch({ kind: 'prePrepare', seq: env.seq, from: env.from, to: env.to, t, eid: env.eid })
+        setAnim()
+        return
+      }
+      if (env.type === 'Prepare') {
+        pushSnapshot()
+        setHighlightType('prepare')
+        dispatch({ kind: 'prepare', from: env.from, to: env.to, t, eid: env.eid })
+        setAnim()
+        return
+      }
+      if (env.type === 'Commit') {
+        pushSnapshot()
+        setHighlightType('commit')
+        dispatch({ kind: 'commit', from: env.from, to: env.to, t, eid: env.eid })
+        setAnim()
+        return
+      }
+      if (env.type === 'Reply') {
+        pushSnapshot()
+        setHighlightType('reply')
+        dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
+        setAnim()
+        return
+      }
+    },
+    [dispatch, flightMs, paused, pushSnapshot, state.f, state.n],
+  )
+
   // Live mode playback: consume buffered SSE events at configurable rate
   useEffect(() => {
     if (mode !== 'live') return
@@ -244,49 +305,12 @@ export default function App() {
       if (paused) return
       const env = liveQueueRef.current.shift()
       if (!env) return
-      const t = simTimeRef.current
-      if (env.type === 'SessionStart') {
-        pushSnapshot()
-        dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
-        return
-      }
-      if (env.type === 'PrimaryElected') {
-        pushSnapshot()
-        dispatch({ kind: 'primaryElected' })
-        return
-      }
-      if (env.type === 'ClientRequest') {
-        pushSnapshot()
-        dispatch({ kind: 'client', to: 0, t, eid: env.eid })
-        return
-      }
-      if (env.type === 'PrePrepare') {
-        pushSnapshot()
-        setHighlightType('preprepare')
-        dispatch({ kind: 'prePrepare', seq: env.seq, from: env.from, to: env.to, t, eid: env.eid })
-        return
-      }
-      if (env.type === 'Prepare') {
-        pushSnapshot()
-        setHighlightType('prepare') 
-        dispatch({ kind: 'prepare', from: env.from, to: env.to, t, eid: env.eid })
-        return
-      }
-      if (env.type === 'Commit') {
-        pushSnapshot()
-        setHighlightType('commit')
-        dispatch({ kind: 'commit', from: env.from, to: env.to, t, eid: env.eid })
-        return
-      }
-      if (env.type === 'Reply') {
-        pushSnapshot()
-        setHighlightType('reply') 
-        dispatch({ kind: 'reply', from: env.from, t, eid: env.eid })
-        return
-      }
+      setLiveQueued(liveQueueRef.current.length)
+      setLastLiveType(env.type)
+      processEnvelope(env, false)
     }, tickMs)
     return () => window.clearInterval(timer)
-  }, [mode, tickMs, paused, dispatch, state.n, state.f, pushSnapshot])
+  }, [mode, tickMs, paused, processEnvelope])
 
   // Demo tick loop, speed-controlled and pause-aware
   useEffect(() => {
@@ -640,11 +664,28 @@ export default function App() {
         const data = await res.json().catch(() => null as any)
         const nVal = typeof data?.num_replicas === 'number' ? data.num_replicas : Math.max(2, numReplicas)
         dispatch({ kind: 'sessionStart', n: nVal, f: state.f })
+        setReplicaStatus(data?.status ? String(data.status) : 'ok')
       }
     } catch (e) {
       console.error('Failed to apply replicas', e)
+      setReplicaStatus('error')
     }
   }, [numReplicas, state.f, dispatch])
+
+  const handleLiveNext = useCallback(() => {
+    const env = liveQueueRef.current.shift()
+    if (!env) return
+    setLiveQueued(liveQueueRef.current.length)
+    setLastLiveType(env.type)
+    processEnvelope(env, true)
+  }, [processEnvelope])
+
+  const handleLiveStop = useCallback(() => {
+    liveQueueRef.current = []
+    setLiveQueued(0)
+    setPaused(false)
+    animUntilRef.current = null
+  }, [])
 
 
   return (
@@ -667,12 +708,14 @@ export default function App() {
         onSendLiveMessage={handleSendLiveMessage}
         liveSendStatus={liveSendStatus}
         sseLogCount={sseLogCount}
+        liveQueued={liveQueued}
+        lastLiveType={lastLiveType}
         onExportSseLog={handleExportSseLog}
         onClearSseLog={handleClearSseLog}
         demoRunning={demoRunning}
         onStartDemo={handleStartDemo}
-        onStopDemo={handleStopDemo}
-        onNextStep={handleNextStep}
+        onStopDemo={mode === 'live' ? handleLiveStop : handleStopDemo}
+        onNextStep={mode === 'live' ? handleLiveNext : handleNextStep}
         onPrevStep={handlePrevStep}
         onContinue={handleStartDemo}
         demoEps={demoEps}
