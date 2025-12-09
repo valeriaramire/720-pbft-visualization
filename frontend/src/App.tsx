@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, us
 import TopBar from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import CanvasPanel, { LaneScrollMetrics } from './components/CanvasPanel'
+import DownBar from './components/DownBar'
 import { useNDJSONSocket } from './hooks/useNDJSONSocket'
 import {
   useCanvasRenderer,
@@ -690,9 +691,6 @@ export default function App() {
         numReplicas={numReplicas}
         onNumReplicasChange={setNumReplicas}
         onApplyReplicas={handleApplyReplicas}
-        
-        
-
       />
       <div className="content">
         <Sidebar
@@ -708,19 +706,23 @@ export default function App() {
           highlightType={highlightType}
         />
 
-        <CanvasPanel
-          canvasRef={canvasRef}
-          canvasWrapRef={canvasWrapRef}
-          laneScroll={laneScrollMetrics}
-          stageLabel={state.stageLabel}
-          stageSeq={state.stageSeq}
-          quorumProgress={quorumProgress}
-          commitCount={state.commits.size}
-          quorumThreshold={quorumThreshold}
-          hoverInfo={hoverInfo}
-          zoom={zoom}
-          onZoomChange={setZoom}
-        />
+        <div className="main-panel">
+          <CanvasPanel
+            canvasRef={canvasRef}
+            canvasWrapRef={canvasWrapRef}
+            laneScroll={laneScrollMetrics}
+            stageLabel={state.stageLabel}
+            stageSeq={state.stageSeq}
+            hoverInfo={hoverInfo}
+            zoom={zoom}
+            onZoomChange={setZoom}
+          />
+          <DownBar
+            quorumProgress={quorumProgress}
+            commitCount={state.commits.size}
+            quorumThreshold={quorumThreshold}
+          />
+        </div>
       </div>
     </div>
   )

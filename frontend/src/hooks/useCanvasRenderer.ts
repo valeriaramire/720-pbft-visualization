@@ -91,13 +91,13 @@ export function useCanvasRenderer(
         const y = top + ((bottom - top) * row) / (lanes - 1)
         positions.push({ x: 0, y })
       }
-      const reqX = W * 0.18
-      const ppX = W * 0.36
-      const prepX = W * 0.56
-      const comX = W * 0.72
-      const comFanX = W * 0.84
-      const repX = W * 0.94
-      const stageXs = [reqX, ppX, prepX, comX, comFanX, repX]
+      const stageCount = 6
+      const leftMargin = Math.max(80, W * 0.12)
+      const rightMargin = Math.max(70, W * 0.08)
+      const usableWidth = Math.max(160, W - leftMargin - rightMargin)
+      const stageSpacing = usableWidth / (stageCount - 1)
+      const stageXs = Array.from({ length: stageCount }, (_, i) => leftMargin + i * stageSpacing)
+      const [reqX, ppX, prepX, comX, comFanX, repX] = stageXs
       ctx.strokeStyle = 'rgba(230,235,255,0.2)'
       ctx.setLineDash([6, 6])
       for (const x of stageXs) {
@@ -111,16 +111,11 @@ export function useCanvasRenderer(
       ctx.font = '13px system-ui, sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'top'
-      const mid01 = (reqX + ppX) / 2
-      const mid12 = (ppX + prepX) / 2
-      const mid23 = (prepX + comX) / 2
-      const mid34 = (comX + comFanX) / 2
-      const mid45 = (comFanX + repX) / 2
-      ctx.fillText('Request', mid01, LANE_TITLE_Y)
-      ctx.fillText('PrePrepare', mid12, LANE_TITLE_Y)
-      ctx.fillText('Prepare', mid23, LANE_TITLE_Y)
-      ctx.fillText('Commit', mid34, LANE_TITLE_Y)
-      ctx.fillText('Reply', mid45, LANE_TITLE_Y)
+      const labelCenters = stageXs.slice(0, stageXs.length - 1).map((x, idx) => (x + stageXs[idx + 1]) / 2)
+      const stageLabels = ['Request', 'PrePrepare', 'Prepare', 'Commit', 'Reply']
+      stageLabels.forEach((label, idx) => {
+        ctx.fillText(label, labelCenters[idx], LANE_TITLE_Y)
+      })
       ctx.textAlign = 'left'
       ctx.textBaseline = 'alphabetic'
 

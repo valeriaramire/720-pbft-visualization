@@ -17,9 +17,6 @@ type CanvasPanelProps = {
   laneScroll: LaneScrollMetrics
   stageLabel: string
   stageSeq: number | null
-  quorumProgress: number
-  commitCount: number
-  quorumThreshold: number
   hoverInfo: HoverInfo | null
   zoom: number
   onZoomChange: (value: number) => void
@@ -31,9 +28,6 @@ export default function CanvasPanel({
   laneScroll,
   stageLabel,
   stageSeq,
-  quorumProgress,
-  commitCount,
-  quorumThreshold,
   hoverInfo,
   zoom,
   onZoomChange,
@@ -69,12 +63,6 @@ export default function CanvasPanel({
       </div>
       <div className="stagehud">
         <div className="stagetext">Stage: {stageLabel} · seq: {stageSeq ?? '-'}</div>
-      </div>
-      <div className="quorum">
-        <div className="meter">
-          <div className="fill" style={{ width: `${quorumProgress * 100}%` }} />
-        </div>
-        <div className="label">Commit quorum: {commitCount} / {quorumThreshold}</div>
       </div>
       {hoverInfo && (
         <div className="hovercard" style={{ left: hoverInfo.x + 12, top: hoverInfo.y + 12 }}>
