@@ -123,6 +123,8 @@ frontend/dist/
 frontend/node_modules/
 **/frontend/node_modules/
 **/frontend/dist/
+remote-files/configs/
+remote-files/servers.current.data
 
 # Ignore compiled C++ demo (if any)
 codes/wandlr
