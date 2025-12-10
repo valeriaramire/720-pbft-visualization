@@ -14,6 +14,7 @@ export const initialState: State = {
   stageLabel: 'Idle',
   stageSeq: null,
   eventLog: [],
+  faultyActual: null,
 }
 
 export function reducer(state: State, action: Action): State {
@@ -21,12 +22,14 @@ export function reducer(state: State, action: Action): State {
     case 'sessionStart': {
       const phases = new Map<number, Phase>()
       for (let i = 0; i < action.n; i++) phases.set(i, 'idle')
-      const desc = `Session start · n=${action.n}, f=${action.f}`
+      const fCap = typeof action.fCap === 'number' ? action.fCap : action.f
+      const faultyActual = typeof action.faultyActual === 'number' ? action.faultyActual : 0
+      const desc = `Session start · n=${action.n}, f=${faultyActual}, f_cap=${fCap}`
       const eventLog = [...state.eventLog, desc].slice(-8)
       return {
         ...state,
         n: action.n,
-        f: action.f,
+        f: fCap,
         view: 0,
         seq: 0,
         prepares: new Set(),
@@ -35,6 +38,7 @@ export function reducer(state: State, action: Action): State {
         stageLabel: 'Session Start',
         stageSeq: 0,
         eventLog,
+        faultyActual,
       }
     }
     case 'primaryElected': {
@@ -137,6 +141,13 @@ export function reducer(state: State, action: Action): State {
         stageSeq: state.seq ? state.seq + 1 : 1,
         eventLog,
       }
+    }
+    case 'faultyReplicas': {
+      const ids = Array.isArray(action.ids) ? action.ids : []
+      const count = typeof action.count === 'number' ? action.count : ids.length
+      const desc = `FaultyReplicas · ids=[${ids.join(',')}] · count=${count}`
+      const eventLog = [...state.eventLog, desc].slice(-8)
+      return { ...state, faultyActual: count, eventLog }
     }
     case 'stage': {
       return { ...state, stageLabel: action.label, stageSeq: action.seq }

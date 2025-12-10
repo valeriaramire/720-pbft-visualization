@@ -23,11 +23,19 @@ export function useNDJSONSocket(
     }
     setStatus('connecting')
     let urlToUse = baseUrlRef.current
-    const last = lastEidRef.current
-    if (last !== null) {
-      const u = new URL(urlToUse)
-      u.searchParams.set('from_eid', String(last + 1))
+    try {
+      const u = new URL(urlToUse, window.location.href)
+      // Always give each connection a unique consumer group unless caller already set one.
+      if (!u.searchParams.has('group')) {
+        u.searchParams.set('group', `run-${Date.now()}`)
+      }
+      const last = lastEidRef.current
+      if (last !== null && !u.searchParams.has('from_eid')) {
+        u.searchParams.set('from_eid', String(last + 1))
+      }
       urlToUse = u.toString()
+    } catch {
+      // If URL parsing fails, fall back to the raw string.
     }
     const es = new EventSource(urlToUse)
     esRef.current = es
