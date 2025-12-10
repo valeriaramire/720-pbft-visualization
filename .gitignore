@@ -98,7 +98,8 @@ wandlr-source/
 
 # SOME MORE 
 outdated/
-# remote-files/configs/
+# PBFT runtime configs (generated)
+remote-files/configs/pbft-*.txt
 # remote-files/servers.data
 # remote-files/servers4.data
 init_known_hosts
