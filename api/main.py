@@ -16,6 +16,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from kafka import KafkaConsumer
 
+
+def compute_fault_tolerance(replica_count: int) -> int:
+    if not isinstance(replica_count, int) or replica_count < 1:
+        return 0
+    return max(0, (replica_count - 1) // 3)
+
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092").split(",")
 KAFKA_BOOTSTRAP_SERVERS = [server.strip() for server in KAFKA_BOOTSTRAP_SERVERS if server.strip()]
 if not KAFKA_BOOTSTRAP_SERVERS:
@@ -27,7 +33,17 @@ SESSION_TIMEOUT_MS = int(os.getenv("PBFT_SESSION_TIMEOUT_MS", "45000"))  # 45 se
 MAX_POLL_RECORDS = int(os.getenv("PBFT_MAX_POLL_RECORDS", "136"))
 
 REPLICA_COUNT = int(os.getenv("PBFT_REPLICAS", "4"))
-FAULT_TOLERANCE = int(os.getenv("PBFT_F", "1"))
+_fault_from_env = os.getenv("PBFT_F")
+if _fault_from_env is not None:
+    try:
+        FAULT_TOLERANCE = max(0, int(_fault_from_env))
+        FAULT_TOLERANCE_FROM_ENV = True
+    except ValueError:
+        FAULT_TOLERANCE = compute_fault_tolerance(REPLICA_COUNT)
+        FAULT_TOLERANCE_FROM_ENV = False
+else:
+    FAULT_TOLERANCE = compute_fault_tolerance(REPLICA_COUNT)
+    FAULT_TOLERANCE_FROM_ENV = False
 SESSION_ID = os.getenv("PBFT_SESSION_ID", "pbft-session")
 ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("PBFT_ALLOWED_ORIGINS", "*").split(",") if origin.strip()]
 SCHEMA_VERSION = 1
@@ -424,8 +440,9 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
     buffers: Dict[str, RequestBuffer] = {}
 
     def control_events() -> List[Dict[str, Any]]:
+        effective_f = FAULT_TOLERANCE if FAULT_TOLERANCE_FROM_ENV else compute_fault_tolerance(current_replica_count)
         return [
-            build_control_event("SessionStart", {"n": current_replica_count, "f": FAULT_TOLERANCE}),
+            build_control_event("SessionStart", {"n": current_replica_count, "f": effective_f}),
             build_control_event("PrimaryElected", {"primary": 0}),
         ]
 
