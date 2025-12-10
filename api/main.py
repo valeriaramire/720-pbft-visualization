@@ -8,7 +8,7 @@ import json
 import os
 import time
 import subprocess
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from collections import Counter
 
 from fastapi import FastAPI, Form
@@ -76,6 +76,7 @@ current_request_id = 0
 current_replica_count = REPLICA_COUNT
 control_epoch = -1
 last_round_events: List[str] = []
+faulty_replicas: Set[int] = set()
 
 app = FastAPI(title="PBFT Consumer API")
 app.add_middleware(
@@ -432,8 +433,16 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
     def control_events() -> List[Dict[str, Any]]:
         effective_f = FAULT_TOLERANCE if FAULT_TOLERANCE_FROM_ENV else compute_fault_tolerance(current_replica_count)
         return [
-            build_control_event("SessionStart", {"n": current_replica_count, "f": effective_f}),
+            # In live mode: f = actual faulty count, f_cap = tolerance
+            build_control_event(
+                "SessionStart",
+                {"n": current_replica_count, "f": len(faulty_replicas), "f_cap": effective_f},
+            ),
             build_control_event("PrimaryElected", {"primary": 0}),
+            build_control_event(
+                "FaultyReplicas",
+                {"ids": sorted(faulty_replicas), "count": len(faulty_replicas)},
+            ),
         ]
 
     def flush_buffer(key: str, buf: RequestBuffer, remember: bool = True, reason: str = "manual"):
@@ -670,7 +679,7 @@ async def start_run(
     - kill any existing PBFT processes
     - start a fresh run 
     """
-    global current_request, current_replica_count, control_epoch
+    global current_request, current_replica_count, control_epoch, faulty_replicas
 
     # 1) Normalize and store the message
     msg = message.strip()
@@ -721,12 +730,67 @@ async def reset_run():
 
     return {"status": "reset", "message": current_request}
 
+
+def _parse_ids(ids: str) -> Set[int]:
+    parsed: Set[int] = set()
+    if not isinstance(ids, str):
+        return parsed
+    for part in ids.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            val = int(part)
+            if val >= 0:
+                parsed.add(val)
+        except ValueError:
+            continue
+    return parsed
+
+
+@app.post("/faulty_update")
+async def faulty_update(ids: str = Form(""), action: str = Form("add")):
+    """
+    Update the set of faulty replicas and broadcast via control events.
+    action in {add, remove, set}
+    """
+    global faulty_replicas, control_epoch
+
+    requested = _parse_ids(ids)
+    if not requested:
+        return {
+            "status": "noop",
+            "faulty_ids": sorted(faulty_replicas),
+            "count": len(faulty_replicas),
+        }
+
+    before = set(faulty_replicas)
+    action_lc = (action or "").strip().lower()
+    if action_lc == "set":
+        faulty_replicas.clear()
+        faulty_replicas.update(requested)
+    elif action_lc == "remove":
+        for rid in requested:
+            faulty_replicas.discard(rid)
+    else:  # default to add
+        faulty_replicas.update(requested)
+
+    changed = faulty_replicas != before
+    if changed:
+        control_epoch = (control_epoch + 1) if control_epoch >= 0 else 0
+
+    return {
+        "status": "updated" if changed else "unchanged",
+        "faulty_ids": sorted(faulty_replicas),
+        "count": len(faulty_replicas),
+    }
+
 @app.post("/num_replicas")
 async def set_num_replicas(num_replicas: int = Form(4)):
     """
     Manage the number of PBFT replicas independently of start_run.
     """
-    global REPLICA_COUNT, current_replica_count, control_epoch, last_round_events
+    global REPLICA_COUNT, current_replica_count, control_epoch, last_round_events, faulty_replicas
 
     # Sanitize input
     try:
@@ -749,6 +813,7 @@ async def set_num_replicas(num_replicas: int = Form(4)):
     current_replica_count = new_count
     control_epoch = (control_epoch + 1) if control_epoch >= 0 else 0
     last_round_events.clear()
+    faulty_replicas.clear()
 
     # Trigger PBFT reconfiguration (kill + regen configs + recopy)
     try:

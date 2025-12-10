@@ -273,7 +273,7 @@ export default function App() {
   // Initialize demo session once when demo starts
   useEffect(() => {
     if (demoRunning && !demoInitializedRef.current) {
-      dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
+      dispatch({ kind: 'sessionStart', n: state.n, f: state.f, fCap: state.f, faultyActual: 0 })
       localEidRef.current = 0
       demoRef.current = { seq: 1, stage: 'client', r: 0 }
       const parsed = new Set<number>()
@@ -304,7 +304,18 @@ export default function App() {
       }
       if (env.type === 'SessionStart') {
         pushSnapshot()
-        dispatch({ kind: 'sessionStart', n: env.data?.n ?? state.n, f: env.data?.f ?? state.f })
+        const nVal = typeof env.data?.n === 'number' ? env.data.n : state.n
+        const fActual = typeof env.data?.f === 'number' ? env.data.f : 0
+        const fCap = typeof env.data?.f_cap === 'number' ? env.data.f_cap : state.f
+        dispatch({ kind: 'sessionStart', n: nVal, f: fCap, fCap, faultyActual: fActual })
+        setAnim()
+        return
+      }
+      if (env.type === 'FaultyReplicas') {
+        const ids = Array.isArray(env.data?.ids) ? env.data.ids : []
+        const count = typeof env.data?.count === 'number' ? env.data.count : ids.length
+        pushSnapshot()
+        dispatch({ kind: 'faultyReplicas', ids, count })
         setAnim()
         return
       }
@@ -486,10 +497,11 @@ export default function App() {
 
   const initDemoManual = useCallback(() => {
     pushSnapshot()
-    dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
+    const parsed = parseFaultyInput(typeof faultyInput === 'string' ? faultyInput : '', state.n)
+    dispatch({ kind: 'sessionStart', n: state.n, f: state.f, fCap: state.f, faultyActual: parsed.size })
     localEidRef.current = 0
     demoRef.current = { seq: 1, stage: 'client', r: 0 }
-    faultySetRef.current = parseFaultyInput(typeof faultyInput === 'string' ? faultyInput : '', state.n)
+    faultySetRef.current = parsed
     manualInitializedRef.current = true
   }, [dispatch, state.n, state.f, faultyInput, pushSnapshot, parseFaultyInput])
 
@@ -614,7 +626,7 @@ export default function App() {
       setDemoRunning(false)
       setMode('live')
       clearFaultySet()
-      dispatch({ kind: 'sessionStart', n: state.n, f: 0 })
+      dispatch({ kind: 'sessionStart', n: state.n, f: state.f, fCap: state.f, faultyActual: 0 })
     } else {
       disconnect()
       setMode('demo')
@@ -625,7 +637,7 @@ export default function App() {
     const nVal = Math.max(1, Math.floor(nInput))
     const maxF = Math.floor((nVal - 1) / 3)
     const parsed = parseFaultyInput(typeof faultyInput === 'string' ? faultyInput : '', nVal)
-    dispatch({ kind: 'sessionStart', n: nVal, f: maxF })
+    dispatch({ kind: 'sessionStart', n: nVal, f: maxF, fCap: maxF, faultyActual: parsed.size })
     faultySetRef.current = parsed
   }, [dispatch, nInput, faultyInput, parseFaultyInput])
 
@@ -721,7 +733,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json().catch(() => null as any)
         const nVal = typeof data?.num_replicas === 'number' ? data.num_replicas : Math.max(2, numReplicas)
-        dispatch({ kind: 'sessionStart', n: nVal, f: state.f })
+        dispatch({ kind: 'sessionStart', n: nVal, f: state.f, fCap: state.f, faultyActual: 0 })
         setReplicaStatus('ok')
       } else {
         setReplicaStatus('error')
@@ -814,7 +826,7 @@ export default function App() {
           stageLabel={state.stageLabel}
           stageSeq={state.stageSeq}
           highlightType={highlightType}
-          faultyCount={demoFaultyCount}
+          faultyCount={mode === 'demo' ? demoFaultyCount : state.faultyActual}
         />
 
         <div className="main-panel">

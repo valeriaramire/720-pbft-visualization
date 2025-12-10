@@ -1,5 +1,13 @@
 export type Phase = 'idle' | 'preprepare' | 'prepare' | 'commit' | 'reply'
-export type EventType = 'ClientRequest' | 'PrePrepare' | 'Prepare' | 'Commit' | 'Reply' | 'SessionStart' | 'PrimaryElected'
+export type EventType =
+  | 'ClientRequest'
+  | 'PrePrepare'
+  | 'Prepare'
+  | 'Commit'
+  | 'Reply'
+  | 'SessionStart'
+  | 'PrimaryElected'
+  | 'FaultyReplicas'
 
 export type Envelope = {
   schema_ver: number
@@ -35,10 +43,11 @@ export type State = {
   stageLabel: string
   stageSeq: number | null
   eventLog: string[]
+  faultyActual: number | null
 }
 
 export type Action =
-  | { kind: 'sessionStart'; n: number; f: number }
+  | { kind: 'sessionStart'; n: number; f: number; fCap?: number; faultyActual?: number }
   | { kind: 'primaryElected' }
   | { kind: 'prePrepare'; seq: number; from: number; to: number[]; t: number; eid: number }
   | { kind: 'prepare'; from: number; to?: number[]; t: number; eid: number }
@@ -48,5 +57,6 @@ export type Action =
   | { kind: 'stage'; label: string; seq: number | null }
   | { kind: 'reply'; from: number; t: number; eid: number }
   | { kind: 'restore'; snapshot: State }
+  | { kind: 'faultyReplicas'; ids: number[]; count: number }
 
 export type LayoutMode = 'ring' | 'lanes'
