@@ -2,21 +2,21 @@ import React, { useState, useEffect } from 'react'
 
 type SidebarProps = {
   n: number
-  f: number
+  faultCap: number
   view: number
-  seq: number
   commits: number
   quorumThreshold: number
   eventLog: string[]
   stageLabel: string
   stageSeq: number | null
   highlightType?: 'commit' | 'prepare' | 'preprepare' | 'reply' | null
+  faultyCount?: number | null
 }
 
 export default function Sidebar({
-  n, f, view, seq, commits, quorumThreshold,
+  n, faultCap, view, commits, quorumThreshold,
   eventLog, stageLabel, stageSeq,
-  highlightType
+  highlightType, faultyCount
 }: SidebarProps) {
 
 
@@ -68,9 +68,9 @@ export default function Sidebar({
 
      
       <div className="kv"><span>n</span><strong>{n}</strong></div>
-      <div className="kv"><span>f</span><strong>{f}</strong></div>
+      <div className="kv"><span>f (actual faults)</span><strong>{faultyCount != null ? faultyCount : '—'}</strong></div>
+      <div className="kv"><span>f cap (tolerance)</span><strong>{faultCap}</strong></div>
       <div className="kv"><span>view</span><strong>{view}</strong></div>
-      <div className="kv"><span>seq</span><strong>{seq}</strong></div>
       <div className="kv"><span>commits</span><strong>{commits}</strong></div>
       <div className="kv"><span>quorum</span><strong>{quorumThreshold}</strong></div>
 

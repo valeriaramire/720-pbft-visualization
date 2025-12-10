@@ -35,7 +35,6 @@ export default function App() {
   const [demoRunning, setDemoRunning] = useState(false)
   const [demoEps, setDemoEps] = useState(3)
   const [nInput, setNInput] = useState<number>(initialState.n)
-  const [fInput, setFInput] = useState<number>(initialState.f)
   const [faultyInput, setFaultyInput] = useState<string>('')
   const [layout, setLayout] = useState<LayoutMode>('ring')
   const [numReplicas, setNumReplicas] = useState(4)
@@ -45,7 +44,7 @@ export default function App() {
   const [liveSendStatus, setLiveSendStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle')
   const [zoom, setZoom] = useState(1)
   const [sseLogCount, setSseLogCount] = useState(0)
-  const [replicaStatus, setReplicaStatus] = useState<string>('')
+  const [replicaStatus, setReplicaStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const [liveQueued, setLiveQueued] = useState(0)
   const [lastLiveType, setLastLiveType] = useState<string | null>(null)
   const lastEidRef = useRef<number | null>(null)
@@ -61,6 +60,7 @@ export default function App() {
   const sseLogRef = useRef<Envelope[]>([])
   const animUntilRef = useRef<number | null>(null)
   const historyRef = useRef<Snapshot[]>([])
+  const futureRef = useRef<Snapshot[]>([])
 
   useEffect(() => {
     lastEidRef.current = state.lastEid
@@ -79,25 +79,6 @@ export default function App() {
     return () => observer.disconnect()
   }, [])
 
-  const pushSnapshot = useCallback(() => {
-    const snap: Snapshot = {
-      state: {
-        ...state,
-        prepares: new Set(state.prepares),
-        commits: new Set(state.commits),
-        nodePhase: new Map(state.nodePhase),
-        messages: [...state.messages],
-        eventLog: [...state.eventLog],
-      },
-      simTime: simTimeRef.current,
-      demo: { ...demoRef.current },
-    }
-    const buf = historyRef.current
-    const next = [...buf, snap]
-    // keep last 80 steps
-    historyRef.current = next.length > 80 ? next.slice(next.length - 80) : next
-  }, [state])
-
   // SSE handler: just buffer raw envelopes, playback is controlled by speed slider
   const onEvent = useCallback((env: Envelope) => {
     liveQueueRef.current.push(env)
@@ -108,7 +89,11 @@ export default function App() {
   const { status, connect, disconnect } = useNDJSONSocket(url, onEvent, lastEidRef)
 
   useEffect(() => {
+    if (mode !== 'live') return
     dispatch({ kind: 'connected', value: status === 'connected' })
+  }, [status, mode])
+
+  useEffect(() => {
     if (status === 'connected' && demoRunning) {
       setDemoRunning(false)
     }
@@ -143,7 +128,6 @@ export default function App() {
 
   useEffect(() => {
     setNInput(state.n)
-    setFInput(state.f)
   }, [state.n, state.f])
 
   const laneScrollMetrics = useMemo<LaneScrollMetrics>(() => {
@@ -171,6 +155,47 @@ export default function App() {
   const flightMs = useMemo(
     () => Math.max(200, Math.floor(tickMs * 0.8)),
     [tickMs],
+  )
+
+  const captureSnapshot = useCallback((): Snapshot => {
+    return {
+      state: {
+        ...state,
+        prepares: new Set(state.prepares),
+        commits: new Set(state.commits),
+        nodePhase: new Map(state.nodePhase),
+        messages: [...state.messages],
+        eventLog: [...state.eventLog],
+      },
+      simTime: simTimeRef.current,
+      demo: { ...demoRef.current },
+    }
+  }, [state])
+
+  const pushSnapshot = useCallback(() => {
+    const snap = captureSnapshot()
+    const buf = historyRef.current
+    const next = [...buf, snap]
+    // keep last 80 steps
+    historyRef.current = next.length > 80 ? next.slice(next.length - 80) : next
+    futureRef.current = []
+  }, [captureSnapshot])
+
+  const restoreSnapshot = useCallback(
+    (snap: Snapshot) => {
+      animUntilRef.current = null
+      const baseTime = simTimeRef.current
+      simTimeRef.current = baseTime
+      demoRef.current = { ...snap.demo }
+      const retimedState = {
+        ...snap.state,
+        messages: snap.state.messages.map((m) => ({ ...m, t: baseTime })),
+      }
+      dispatch({ kind: 'restore', snapshot: retimedState as any })
+      // Always animate the restored step once, regardless of paused flag.
+      animUntilRef.current = simTimeRef.current + flightMs
+    },
+    [dispatch, flightMs],
   )
 
   useCanvasRenderer(state, 0, canvasRef, faultySetRef.current, layout, markerRef, simTimeRef, flightMs, paused)
@@ -209,6 +234,35 @@ export default function App() {
     const v = quorumThreshold ? state.commits.size / quorumThreshold : 0
     return Math.max(0, Math.min(1, v))
   }, [state.commits.size, quorumThreshold])
+
+  const parseFaultyInput = useCallback((input: string, nLimit: number) => {
+    const parsed = new Set<number>()
+    input
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .forEach((s) => {
+        const v = parseInt(s, 10)
+        if (!isNaN(v) && v >= 0 && v < nLimit) {
+          parsed.add(v)
+        }
+      })
+    return parsed
+  }, [])
+
+  const demoFaultyCount = useMemo(() => {
+    if (mode !== 'demo') return null
+    const nVal = Math.max(1, Math.floor(nInput))
+    return parseFaultyInput(typeof faultyInput === 'string' ? faultyInput : '', nVal).size
+  }, [mode, faultyInput, parseFaultyInput, nInput])
+
+  const faultCap = useMemo(() => {
+    if (mode === 'demo') {
+      const nVal = Math.max(1, Math.floor(nInput))
+      return Math.floor((nVal - 1) / 3)
+    }
+    return state.f
+  }, [mode, nInput, state.f])
 
   const demoTimerRef = useRef<number | null>(null)
   const localEidRef = useRef<number>(0)
@@ -402,6 +456,13 @@ export default function App() {
         return
       }
       if (stage === 'reply') {
+        const quorumNeeded = 2 * state.f + 1
+        if (state.commits.size < quorumNeeded) {
+          demoRef.current.stage = 'client'
+          demoRef.current.r = 0
+          demoRef.current.seq = seq + 1
+          return
+        }
         if (r < n) {
           if (!faultySetRef.current.has(r)) {
             dispatch({ kind: 'reply', from: r, t, eid: bump() })
@@ -421,26 +482,16 @@ export default function App() {
       if (demoTimerRef.current) clearInterval(demoTimerRef.current)
       demoTimerRef.current = null
     }
-  }, [demoRunning, tickMs, state.n, paused])
+  }, [demoRunning, tickMs, state.n, paused, state.commits.size, state.f, pushSnapshot])
 
   const initDemoManual = useCallback(() => {
     pushSnapshot()
     dispatch({ kind: 'sessionStart', n: state.n, f: state.f })
     localEidRef.current = 0
     demoRef.current = { seq: 1, stage: 'client', r: 0 }
-    const parsed = new Set<number>()
-    const fi = typeof faultyInput === 'string' ? faultyInput : ''
-    fi
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .forEach((s) => {
-        const v = parseInt(s, 10)
-        if (!isNaN(v)) parsed.add(v)
-      })
-    faultySetRef.current = parsed
+    faultySetRef.current = parseFaultyInput(typeof faultyInput === 'string' ? faultyInput : '', state.n)
     manualInitializedRef.current = true
-  }, [dispatch, state.n, state.f, faultyInput, pushSnapshot])
+  }, [dispatch, state.n, state.f, faultyInput, pushSnapshot, parseFaultyInput])
 
   const manualTick = useCallback(() => {
     const t = simTimeRef.current
@@ -524,11 +575,18 @@ export default function App() {
       return
     }
     if (stage === 'reply') {
-      if (r < n) {
-        if (!faultySetRef.current.has(r)) {
-          pushSnapshot()
-          dispatch({ kind: 'reply', from: r, t, eid: bump() })
-        }
+      const quorumNeeded = 2 * state.f + 1
+      if (state.commits.size < quorumNeeded) {
+        demoRef.current.stage = 'client'
+        demoRef.current.r = 0
+        demoRef.current.seq = seq + 1
+        return
+      }
+        if (r < n) {
+          if (!faultySetRef.current.has(r)) {
+            pushSnapshot()
+            dispatch({ kind: 'reply', from: r, t, eid: bump() })
+          }
         dispatch({ kind: 'stage', label: 'Reply', seq })
         demoRef.current.r = r + 1
       } else {
@@ -539,29 +597,37 @@ export default function App() {
       if (paused) animUntilRef.current = simTimeRef.current + flightMs
       return
     }
-  }, [dispatch, state.n, paused, flightMs, pushSnapshot])
+  }, [dispatch, state.n, paused, flightMs, pushSnapshot, state.commits.size, state.f])
+
+  const clearFaultySet = useCallback(() => {
+    faultySetRef.current = new Set()
+  }, [])
 
   const handleConnect = useCallback(() => {
     if (demoRunning) setDemoRunning(false)
+    clearFaultySet()
     connect()
-  }, [connect, demoRunning])
+  }, [connect, demoRunning, clearFaultySet])
 
   const handleToggleMode = useCallback(() => {
     if (mode === 'demo') {
       setDemoRunning(false)
       setMode('live')
+      clearFaultySet()
+      dispatch({ kind: 'sessionStart', n: state.n, f: 0 })
     } else {
       disconnect()
       setMode('demo')
     }
-  }, [mode, disconnect])
+  }, [mode, disconnect, clearFaultySet, dispatch, state.n])
 
   const handleApplyConfig = useCallback(() => {
     const nVal = Math.max(1, Math.floor(nInput))
     const maxF = Math.floor((nVal - 1) / 3)
-    const fVal = Math.max(0, Math.min(maxF, Math.floor(fInput)))
-    dispatch({ kind: 'sessionStart', n: nVal, f: fVal })
-  }, [dispatch, nInput, fInput])
+    const parsed = parseFaultyInput(typeof faultyInput === 'string' ? faultyInput : '', nVal)
+    dispatch({ kind: 'sessionStart', n: nVal, f: maxF })
+    faultySetRef.current = parsed
+  }, [dispatch, nInput, faultyInput, parseFaultyInput])
 
   const handleNextStep = useCallback(() => {
     // Cancel any in-flight mini animation and immediately run the next step.
@@ -635,23 +701,15 @@ export default function App() {
     if (!buf.length) return
     const snap = buf[buf.length - 1]
     historyRef.current = buf.slice(0, buf.length - 1)
-    // Cancel any current animation and restore snapshot,
-    // but retime message timestamps so they animate again from "now".
-    animUntilRef.current = null
-    const baseTime = simTimeRef.current
-    simTimeRef.current = baseTime
-    demoRef.current = { ...snap.demo }
-    const retimedState = {
-      ...snap.state,
-      messages: snap.state.messages.map((m) => ({ ...m, t: baseTime })),
-    }
-    dispatch({ kind: 'restore', snapshot: retimedState as any })
-    // Always animate the restored step once, regardless of paused flag.
-    animUntilRef.current = simTimeRef.current + flightMs
-  }, [dispatch, flightMs])
+    const current = captureSnapshot()
+    const fut = [...futureRef.current, current]
+    futureRef.current = fut.length > 80 ? fut.slice(fut.length - 80) : fut
+    restoreSnapshot(snap)
+  }, [captureSnapshot, restoreSnapshot])
 
   const handleApplyReplicas = useCallback(async () => {
     // Update backend replica count, then reflect in local reducer.
+    setReplicaStatus('pending')
     try {
       const body = new URLSearchParams()
       body.append('num_replicas', String(Math.max(2, Math.floor(numReplicas))))
@@ -664,7 +722,9 @@ export default function App() {
         const data = await res.json().catch(() => null as any)
         const nVal = typeof data?.num_replicas === 'number' ? data.num_replicas : Math.max(2, numReplicas)
         dispatch({ kind: 'sessionStart', n: nVal, f: state.f })
-        setReplicaStatus(data?.status ? String(data.status) : 'ok')
+        setReplicaStatus('ok')
+      } else {
+        setReplicaStatus('error')
       }
     } catch (e) {
       console.error('Failed to apply replicas', e)
@@ -673,12 +733,22 @@ export default function App() {
   }, [numReplicas, state.f, dispatch])
 
   const handleLiveNext = useCallback(() => {
+    if (futureRef.current.length) {
+      const current = captureSnapshot()
+      const buf = historyRef.current
+      const nextHistory = [...buf, current]
+      historyRef.current = nextHistory.length > 80 ? nextHistory.slice(nextHistory.length - 80) : nextHistory
+      const nextSnap = futureRef.current[futureRef.current.length - 1]
+      futureRef.current = futureRef.current.slice(0, futureRef.current.length - 1)
+      restoreSnapshot(nextSnap)
+      return
+    }
     const env = liveQueueRef.current.shift()
     if (!env) return
     setLiveQueued(liveQueueRef.current.length)
     setLastLiveType(env.type)
     processEnvelope(env, true)
-  }, [processEnvelope])
+  }, [captureSnapshot, processEnvelope, restoreSnapshot])
 
   const handleLiveStop = useCallback(() => {
     liveQueueRef.current = []
@@ -698,7 +768,6 @@ export default function App() {
         statusClass={statusClass}
         statusLabel={statusLabel}
         lastEid={state.lastEid}
-        onUrlChange={setUrl}
         onConnect={handleConnect}
         onDisconnect={disconnect}
         liveMessage={liveMessage}
@@ -722,8 +791,6 @@ export default function App() {
         onDemoEpsChange={setDemoEps}
         nInput={nInput}
         onNInputChange={setNInput}
-        fInput={fInput}
-        onFInputChange={setFInput}
         faultyInput={faultyInput}
         onFaultyInputChange={setFaultyInput}
         onApplyConfig={handleApplyConfig}
@@ -734,19 +801,20 @@ export default function App() {
         numReplicas={numReplicas}
         onNumReplicasChange={setNumReplicas}
         onApplyReplicas={handleApplyReplicas}
+        replicaStatus={replicaStatus}
       />
       <div className="content">
         <Sidebar
           n={state.n}
-          f={state.f}
+          faultCap={faultCap}
           view={state.view}
-          seq={state.seq}
           commits={state.commits.size}
           quorumThreshold={quorumThreshold}
           eventLog={state.eventLog}
           stageLabel={state.stageLabel}
           stageSeq={state.stageSeq}
           highlightType={highlightType}
+          faultyCount={demoFaultyCount}
         />
 
         <div className="main-panel">

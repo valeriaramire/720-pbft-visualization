@@ -625,6 +625,18 @@ def stream(offset: str = "latest", from_eid: int | None = None, group: str | Non
                         if DEBUG_BUFFERS:
                             print("[BUFFERS]", describe_buffers(buffers, active_final_key))
 
+                        # Flush immediately once we observe a Reply to avoid having to wait for
+                        # the next request (or idle timeout) before emitting the completed round.
+                        if event_type == "Reply":
+                            yield from flush_buffer(req_key, buf, reason="reply_complete")
+                            if active_final_key == req_key:
+                                active_final_key = None
+                            order_to_rank.clear()
+                            rank_to_order.clear()
+                            last_order_seen = None
+                            last_rank_seen = None
+                            continue
+
                         # Track last seen order/rank for round boundary detection
                         if isinstance(order_val, int):
                             last_order_seen = order_val
