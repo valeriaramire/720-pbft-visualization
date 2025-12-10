@@ -10,13 +10,12 @@ type SidebarProps = {
   stageLabel: string
   stageSeq: number | null
   highlightType?: 'commit' | 'prepare' | 'preprepare' | 'reply' | null
-  faultyCount?: number | null
 }
 
 export default function Sidebar({
   n, faultCap, view, commits, quorumThreshold,
   eventLog, stageLabel, stageSeq,
-  highlightType, faultyCount
+  highlightType
 }: SidebarProps) {
 
 
@@ -68,7 +67,6 @@ export default function Sidebar({
 
      
       <div className="kv"><span>n</span><strong>{n}</strong></div>
-      <div className="kv"><span>f (actual faults)</span><strong>{faultyCount != null ? faultyCount : '—'}</strong></div>
       <div className="kv"><span>f cap (tolerance)</span><strong>{faultCap}</strong></div>
       <div className="kv"><span>view</span><strong>{view}</strong></div>
       <div className="kv"><span>commits</span><strong>{commits}</strong></div>

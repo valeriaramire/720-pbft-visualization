@@ -250,12 +250,6 @@ export default function App() {
     return parsed
   }, [])
 
-  const demoFaultyCount = useMemo(() => {
-    if (mode !== 'demo') return null
-    const nVal = Math.max(1, Math.floor(nInput))
-    return parseFaultyInput(typeof faultyInput === 'string' ? faultyInput : '', nVal).size
-  }, [mode, faultyInput, parseFaultyInput, nInput])
-
   const faultCap = useMemo(() => {
     if (mode === 'demo') {
       const nVal = Math.max(1, Math.floor(nInput))
@@ -826,7 +820,6 @@ export default function App() {
           stageLabel={state.stageLabel}
           stageSeq={state.stageSeq}
           highlightType={highlightType}
-          faultyCount={mode === 'demo' ? demoFaultyCount : state.faultyActual}
         />
 
         <div className="main-panel">
