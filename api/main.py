@@ -721,12 +721,16 @@ async def reset_run():
     """
     Kill any existing PBFT processes without starting a new run.
     """
-    global current_request
+    global current_request, control_epoch, last_round_events, faulty_replicas, current_replica_count
 
     # Kill any existing PBFT processes
     subprocess.run(["bash", "../scripts/kill_pbft.sh"], check=False)
 
     current_request = "Empty Request"
+    current_replica_count = REPLICA_COUNT
+    last_round_events.clear()
+    faulty_replicas.clear()
+    control_epoch = (control_epoch + 1) if control_epoch >= 0 else 0
 
     return {"status": "reset", "message": current_request}
 
