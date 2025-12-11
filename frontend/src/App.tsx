@@ -29,7 +29,7 @@ export default function App() {
   const [highlightType, setHighlightType] = useState<
     null | 'commit' | 'prepare' | 'preprepare' | 'reply'
   >(null)
-  const [mode, setMode] = useState<'demo' | 'live'>('demo')
+  const [mode, setMode] = useState<'demo' | 'live'>('live')
   const [url, setUrl] = useState('http://localhost:8002/stream')
   
   const [demoRunning, setDemoRunning] = useState(false)
@@ -47,6 +47,7 @@ export default function App() {
   const [replicaStatus, setReplicaStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const [liveQueued, setLiveQueued] = useState(0)
   const [lastLiveType, setLastLiveType] = useState<string | null>(null)
+  const [resetStatus, setResetStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
   const lastEidRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasWrapRef = useRef<HTMLDivElement>(null)
@@ -58,6 +59,7 @@ export default function App() {
   const lastRealTimeRef = useRef<number | null>(null)
   const liveQueueRef = useRef<Envelope[]>([])
   const sseLogRef = useRef<Envelope[]>([])
+  const dropEventsRef = useRef(false)
   const animUntilRef = useRef<number | null>(null)
   const historyRef = useRef<Snapshot[]>([])
   const futureRef = useRef<Snapshot[]>([])
@@ -81,6 +83,12 @@ export default function App() {
 
   // SSE handler: just buffer raw envelopes, playback is controlled by speed slider
   const onEvent = useCallback((env: Envelope) => {
+    if (dropEventsRef.current && env.type !== 'SessionStart') {
+      return
+    }
+    if (dropEventsRef.current && env.type === 'SessionStart') {
+      dropEventsRef.current = false
+    }
     liveQueueRef.current.push(env)
     sseLogRef.current.push(env)
     setSseLogCount((c) => c + 1)
@@ -230,10 +238,11 @@ export default function App() {
   }, [])
 
   const quorumThreshold = useMemo(() => 2 * state.f + 1, [state.f])
+  const quorumCount = useMemo(() => state.prepares.size, [state.prepares.size])
   const quorumProgress = useMemo(() => {
-    const v = quorumThreshold ? state.commits.size / quorumThreshold : 0
+    const v = quorumThreshold ? quorumCount / quorumThreshold : 0
     return Math.max(0, Math.min(1, v))
-  }, [state.commits.size, quorumThreshold])
+  }, [quorumCount, quorumThreshold])
 
   const parseFaultyInput = useCallback((input: string, nLimit: number) => {
     const parsed = new Set<number>()
@@ -435,6 +444,13 @@ export default function App() {
         return
       }
       if (stage === 'commit') {
+        const quorumNeeded = 2 * state.f + 1
+        if (state.prepares.size < quorumNeeded) {
+          demoRef.current.stage = 'client'
+          demoRef.current.r = 0
+          demoRef.current.seq = seq + 1
+          return
+        }
         // Skip faulty replicas; each tick should correspond to one visible Commit.
         let nextR = r
         while (nextR < n && faultySetRef.current.has(nextR)) {
@@ -487,7 +503,7 @@ export default function App() {
       if (demoTimerRef.current) clearInterval(demoTimerRef.current)
       demoTimerRef.current = null
     }
-  }, [demoRunning, tickMs, state.n, paused, state.commits.size, state.f, pushSnapshot])
+  }, [demoRunning, tickMs, state.n, paused, state.commits.size, state.prepares.size, state.f, pushSnapshot])
 
   const initDemoManual = useCallback(() => {
     pushSnapshot()
@@ -554,6 +570,14 @@ export default function App() {
       return
     }
     if (stage === 'commit') {
+      const quorumNeeded = 2 * state.f + 1
+      if (state.prepares.size < quorumNeeded) {
+        demoRef.current.stage = 'client'
+        demoRef.current.r = 0
+        demoRef.current.seq = seq + 1
+        if (paused) animUntilRef.current = simTimeRef.current + flightMs
+        return
+      }
       // Find the next non-faulty replica that should send Commit.
       let nextR = r
       while (nextR < n && faultySetRef.current.has(nextR)) {
@@ -603,7 +627,7 @@ export default function App() {
       if (paused) animUntilRef.current = simTimeRef.current + flightMs
       return
     }
-  }, [dispatch, state.n, paused, flightMs, pushSnapshot, state.commits.size, state.f])
+  }, [dispatch, state.n, paused, flightMs, pushSnapshot, state.commits.size, state.prepares.size, state.f])
 
   const clearFaultySet = useCallback(() => {
     faultySetRef.current = new Set()
@@ -695,6 +719,16 @@ export default function App() {
     setSseLogCount(0)
   }, [])
 
+  const clearEventBuffers = useCallback(() => {
+    liveQueueRef.current = []
+    historyRef.current = []
+    futureRef.current = []
+    sseLogRef.current = []
+    setLiveQueued(0)
+    setLastLiveType(null)
+    setSseLogCount(0)
+  }, [])
+
   const statusLabel = mode === 'demo' ? (demoRunning ? 'demo' : 'idle') : status
   const statusClass = mode === 'demo' && demoRunning ? 'connected' : status
 
@@ -763,6 +797,25 @@ export default function App() {
     animUntilRef.current = null
   }, [])
 
+  const handleResetRun = useCallback(async () => {
+    setResetStatus('pending')
+    dropEventsRef.current = true
+    try {
+      const res = await fetch('http://localhost:8002/reset_run', { method: 'POST' })
+      if (res.ok) {
+        clearEventBuffers()
+        setResetStatus('ok')
+      } else {
+        dropEventsRef.current = false
+        setResetStatus('error')
+      }
+    } catch (err) {
+      console.error('Failed to reset run', err)
+      dropEventsRef.current = false
+      setResetStatus('error')
+    }
+  }, [clearEventBuffers])
+
 
   return (
     <div className="app">
@@ -808,13 +861,15 @@ export default function App() {
         onNumReplicasChange={setNumReplicas}
         onApplyReplicas={handleApplyReplicas}
         replicaStatus={replicaStatus}
+        onResetRun={handleResetRun}
+        resetStatus={resetStatus}
       />
       <div className="content">
         <Sidebar
           n={state.n}
           faultCap={faultCap}
           view={state.view}
-          commits={state.commits.size}
+          quorumCount={quorumCount}
           quorumThreshold={quorumThreshold}
           eventLog={state.eventLog}
           stageLabel={state.stageLabel}
@@ -835,7 +890,7 @@ export default function App() {
           />
           <DownBar
             quorumProgress={quorumProgress}
-            commitCount={state.commits.size}
+            quorumCount={quorumCount}
             quorumThreshold={quorumThreshold}
           />
         </div>

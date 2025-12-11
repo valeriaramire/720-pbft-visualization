@@ -5,7 +5,7 @@ type SidebarProps = {
   f: number
   view: number
   seq: number
-  commits: number
+  quorumCount: number
   quorumThreshold: number
   statusMessage?: string        // optional message
   showAt?: number               // time (ms) after which to show the message
@@ -17,7 +17,7 @@ export default function Sidebar({
   f,
   view,
   seq,
-  commits,
+  quorumCount,
   quorumThreshold,
   statusMessage = 'System running smoothly.',
   showAt = 2000,
@@ -41,8 +41,8 @@ export default function Sidebar({
       <div className="kv"><span>f</span><strong>{f}</strong></div>
       <div className="kv"><span>view</span><strong>{view}</strong></div>
       <div className="kv"><span>seq</span><strong>{seq}</strong></div>
-      <div className="kv"><span>commits</span><strong>{commits}</strong></div>
-      <div className="kv"><span>quorum</span><strong>{quorumThreshold}</strong></div>
+      <div className="kv"><span>quorum count</span><strong>{quorumCount}</strong></div>
+      <div className="kv"><span>quorum thresh</span><strong>{quorumThreshold}</strong></div>
       <div className="kv"><span></span><strong>{statusMessage}</strong></div>
 
       {/* Status Info Window */}

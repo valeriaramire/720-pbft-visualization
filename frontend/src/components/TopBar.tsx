@@ -26,6 +26,8 @@ type TopBarProps = {
   onNumReplicasChange: (value: number) => void
   onApplyReplicas: () => void
   replicaStatus: 'idle' | 'pending' | 'ok' | 'error'
+  onResetRun: () => void
+  resetStatus: 'idle' | 'pending' | 'ok' | 'error'
   demoRunning: boolean
   onStartDemo: () => void
   onStopDemo: () => void
@@ -70,6 +72,8 @@ export default function TopBar({
   onNumReplicasChange,
   onApplyReplicas,
   replicaStatus,
+  onResetRun,
+  resetStatus,
   demoRunning,
   onStartDemo,
   onStopDemo,
@@ -190,9 +194,22 @@ export default function TopBar({
                     {replicaStatus === 'pending' && <span className="btn-indicator" aria-hidden="true" />}
                     Apply
                   </button>
+                  <button
+                    className={`btn reset-btn${resetStatus === 'pending' ? ' is-pending' : ''}`}
+                    onClick={onResetRun}
+                    disabled={resetStatus === 'pending'}
+                  >
+                    {resetStatus === 'pending' && <span className="btn-indicator" aria-hidden="true" />}
+                    Reset
+                  </button>
                   {replicaStatus !== 'idle' && (
                     <span className={`replica-status badge-${replicaStatus}`}>
                       {replicaStatus === 'pending' ? 'Applying…' : replicaStatus === 'ok' ? 'Applied' : 'Error'}
+                    </span>
+                  )}
+                  {resetStatus !== 'idle' && (
+                    <span className={`replica-status badge-${resetStatus}`}>
+                      {resetStatus === 'pending' ? 'Resetting…' : resetStatus === 'ok' ? 'Reset' : 'Error'}
                     </span>
                   )}
                 </div>

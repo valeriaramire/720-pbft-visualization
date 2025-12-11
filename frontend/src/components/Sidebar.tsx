@@ -4,7 +4,7 @@ type SidebarProps = {
   n: number
   faultCap: number
   view: number
-  commits: number
+  quorumCount: number
   quorumThreshold: number
   eventLog: string[]
   stageLabel: string
@@ -13,7 +13,7 @@ type SidebarProps = {
 }
 
 export default function Sidebar({
-  n, faultCap, view, commits, quorumThreshold,
+  n, faultCap, view, quorumCount, quorumThreshold,
   eventLog, stageLabel, stageSeq,
   highlightType
 }: SidebarProps) {
@@ -50,9 +50,9 @@ export default function Sidebar({
       case 'PrePrepare':
         return 'The primary proposes a request and forwards it to replicas.'
       case 'Prepare':
-        return `Replicas echo the proposal. ${commits}/${quorumThreshold} commits.`
+        return `Replicas echo the proposal. Quorum ${quorumCount}/${quorumThreshold}.`
       case 'Commit':
-        return `Replicas commit the request. Quorum = ${quorumThreshold}.`
+        return `Replicas commit the request once quorum ${quorumThreshold} is satisfied.`
       case 'Reply':
         return 'Replicas reply to the client after committing the request.'
       case 'Session Start':
@@ -69,8 +69,8 @@ export default function Sidebar({
       <div className="kv"><span>n</span><strong>{n}</strong></div>
       <div className="kv"><span>f cap (tolerance)</span><strong>{faultCap}</strong></div>
       <div className="kv"><span>view</span><strong>{view}</strong></div>
-      <div className="kv"><span>commits</span><strong>{commits}</strong></div>
-      <div className="kv"><span>quorum</span><strong>{quorumThreshold}</strong></div>
+      <div className="kv"><span>quorum count</span><strong>{quorumCount}</strong></div>
+      <div className="kv"><span>quorum thresh</span><strong>{quorumThreshold}</strong></div>
 
      
       <div
