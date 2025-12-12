@@ -23,51 +23,14 @@ This repository hosts everything that runs on the webserver to visualize PBFT me
 | `api/requirements.txt` | Python dependencies (`fastapi`, `uvicorn`, `kafka-python`). |
 | `frontend/src/App.tsx` | PBFT visualization UI (defaults to `http://localhost:8002/stream`). |
 
-## 1. Start the Redpanda broker
+## 1. Start the Redpanda broker, API, and remote pBFT setup.
 
 ```bash
-cd ~/redpanda-broker
-sudo docker compose up -d
+chmod +x setup.sh
+./setup.sh
 ```
 
-Helpful commands:
-
-- `sudo docker compose ps` – confirm containers are healthy.
-- `sudo docker compose logs -f redpanda` – tail broker logs.
-
-To stop Redpanda later:
-
-```bash
-cd ~/redpanda-broker
-sudo docker compose down
-```
-
-The compose file advertises Redpanda on `192.168.175.117`; if the server IP changes you must update `--advertise-kafka-addr` and `--advertise-pandaproxy-addr` in `docker-compose.yml`.
-
-## 2. Run the PBFT Consumer API
-
-```bash
-cd ~/api
-python3 -m venv venv          
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8002
-```
-
-Environment variables you can customize before launching:
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `KAFKA_BOOTSTRAP` | `localhost:9092` | Comma-separated Redpanda brokers. |
-| `PBFT_TOPIC` | `pbft-logs` | Kafka topic with PBFT JSON. |
-| `PBFT_GROUP` | `pbft-visualizer` | Consumer group ID. |
-| `PBFT_REPLICAS` | `4` | Replica count `n` shown in UI. |
-| `PBFT_F` | `1` | Fault tolerance `f`. |
-| `PBFT_SESSION_ID` | `pbft-session` | Session ID included in SSE events. |
-| `PBFT_ALLOWED_ORIGINS` | `*` | CORS allowlist for the frontend. |
-
-
-## 3. Run the frontend
+## 2. Run the frontend
 
 ```bash
 cd ~/frontend
@@ -79,39 +42,13 @@ The UI defaults to hitting `http://localhost:8002/stream`. If you tunnel the API
 
 Stop the dev server with `Ctrl+C`.
 
-## 4. Tunnel the API to your laptop (if developing remotely)
-
-From your local workstation:
-
-```bash
-ssh -N -L 18080:localhost:8002 [your name]@206.12.90.91
-# or, once inside the shared jump host:
-ssh -N -L 18080:localhost:8002 webserver
-```
-
-Keep the SSH window open.
-
-## 5. Launch the PBFT demo workload on `mcas720`
-
-1. SSH into the workload machine and deploy the JSON demo:
-   ```bash
-   ssh mcas720
-   cd ~/newtools
-   ./deploy_json_demo.sh
-   ```
-
-`deploy_json_demo.sh` produces PBFT JSON logs and publishes them to the Redpanda topic consumed by `api/main.py`. Keep it running while you need live traffic.
-
-## 6. Teardown checklist
+## 3. Teardown checklist
 
 1. Stop the Vite dev server (`Ctrl+C`).
-2. Stop `uvicorn` (`Ctrl+C`) and `deactivate` the Python virtualenv.
-3. Stop the PBFT demo on `mcas720` when finished.
-4. Shut down Redpanda when no longer needed:
+2. Use backend teardown script
    ```bash
-   cd ~/redpanda-broker
-   sudo docker compose down
+   chmod +x teardown.sh
+   ./teardown.sh
    ```
-5. Close any SSH tunnels (`Ctrl+C` on the tunnel session).
+3. Close any SSH tunnels (`Ctrl+C` on the tunnel session).
 
-Following the order above ensures consumers disconnect cleanly before the broker is removed, which prevents the frontend from hanging on stale SSE connections.
